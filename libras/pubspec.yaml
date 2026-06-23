@@ -1,0 +1,19 @@
+name: libras
+description: >
+  Umbrella package for Libras (Brazilian Sign Language) accessibility tools.
+  Re-exports libras_keyboard (in-app datilologia keyboard) and vlibras_player
+  (VLibras text-to-avatar translation plugin).
+version: 0.1.0
+homepage: https://github.com/your-org/libras
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  libras_keyboard:
+    path: ../libras_keyboard
+  vlibras_player:
+    path: ../vlibras_player
