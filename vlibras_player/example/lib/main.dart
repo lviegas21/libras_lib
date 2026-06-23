@@ -120,23 +120,29 @@ class _InlinePlayerPageState extends State<_InlinePlayerPage> {
       appBar: AppBar(title: const Text('Player Inline')),
       body: Column(
         children: [
-          VLibrasPlayerWidget(
-            config: const VLibrasConfig(avatar: VLibrasAvatar.icaro),
-            controller: _playerController,
-            height: 340,
-            onReady: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('VLibras pronto!'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            onError: (msg) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Erro: $msg')),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Center(
+              child: VLibrasPlayerWidget(
+                config: const VLibrasConfig(avatar: VLibrasAvatar.icaro),
+                controller: _playerController,
+                height: 220,
+                avatarViewportHeight: 280,
+                onReady: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('VLibras pronto!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                onError: (msg) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $msg')),
+                  );
+                },
+              ),
+            ),
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -242,10 +248,16 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
       appBar: AppBar(title: const Text('Teclado Libras + Player')),
       body: Column(
         children: [
-          VLibrasPlayerWidget(
-            config: const VLibrasConfig(avatar: VLibrasAvatar.guga),
-            controller: _playerController,
-            height: 300,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Center(
+              child: VLibrasPlayerWidget(
+                config: const VLibrasConfig(avatar: VLibrasAvatar.guga),
+                controller: _playerController,
+                height: 200,
+                avatarViewportHeight: 280,
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
