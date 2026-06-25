@@ -54,7 +54,7 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
           children: [
             _SectionHeader(
               icon: Icons.sign_language,
-              title: 'Teclado com SVGs embutidos',
+              title: 'Teclado com imagens embutidas',
               subtitle:
                   'Toque no ícone de Libras ao lado do campo para abrir o teclado.',
             ),
@@ -101,7 +101,7 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
               icon: Icons.palette_outlined,
               title: 'Builder personalizado',
               subtitle:
-                  'Substitua os SVGs embutidos por suas próprias imagens ou widgets.',
+                  'Substitua as imagens embutidas por suas próprias imagens ou widgets.',
             ),
             const SizedBox(height: 12),
 

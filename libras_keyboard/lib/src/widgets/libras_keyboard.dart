@@ -5,13 +5,45 @@ import 'libras_key.dart';
 
 /// The default key layout: A–Z rows followed by the action row.
 const _alphaLetters = [
-  LibrasLetter.a, LibrasLetter.b, LibrasLetter.c, LibrasLetter.d,
-  LibrasLetter.e, LibrasLetter.f, LibrasLetter.g, LibrasLetter.h,
-  LibrasLetter.i, LibrasLetter.j, LibrasLetter.k, LibrasLetter.l,
-  LibrasLetter.m, LibrasLetter.n, LibrasLetter.o, LibrasLetter.p,
-  LibrasLetter.q, LibrasLetter.r, LibrasLetter.s, LibrasLetter.t,
-  LibrasLetter.u, LibrasLetter.v, LibrasLetter.w, LibrasLetter.x,
-  LibrasLetter.y, LibrasLetter.z,
+  LibrasLetter.a,
+  LibrasLetter.b,
+  LibrasLetter.c,
+  LibrasLetter.d,
+  LibrasLetter.e,
+  LibrasLetter.f,
+  LibrasLetter.g,
+  LibrasLetter.h,
+  LibrasLetter.i,
+  LibrasLetter.j,
+  LibrasLetter.k,
+  LibrasLetter.l,
+  LibrasLetter.m,
+  LibrasLetter.n,
+  LibrasLetter.o,
+  LibrasLetter.p,
+  LibrasLetter.q,
+  LibrasLetter.r,
+  LibrasLetter.s,
+  LibrasLetter.t,
+  LibrasLetter.u,
+  LibrasLetter.v,
+  LibrasLetter.w,
+  LibrasLetter.x,
+  LibrasLetter.y,
+  LibrasLetter.z,
+];
+
+const _numberLetters = [
+  LibrasLetter.num0,
+  LibrasLetter.num1,
+  LibrasLetter.num2,
+  LibrasLetter.num3,
+  LibrasLetter.num4,
+  LibrasLetter.num5,
+  LibrasLetter.num6,
+  LibrasLetter.num7,
+  LibrasLetter.num8,
+  LibrasLetter.num9,
 ];
 
 const _actionLetters = [
@@ -24,28 +56,50 @@ const _actionLetters = [
 ///
 /// The image fills the entire key tile area.
 /// Assets are loaded from `packages/libras_keyboard/assets/libras/<letter>.png`.
+/// Falls back to a text label when the asset file is not found (e.g. in
+/// development before real images are added).
 Widget defaultLetterBuilder(String letter, bool isPressed) {
-  return ColorFiltered(
-    colorFilter: isPressed
-        ? const ColorFilter.matrix(<double>[
-            0.6, 0,   0,   0, 0,
-            0,   0.6, 0,   0, 0,
-            0,   0,   0.6, 0, 0,
-            0,   0,   0,   1, 0,
-          ])
-        : const ColorFilter.matrix(<double>[
-            1, 0, 0, 0, 0,
-            0, 1, 0, 0, 0,
-            0, 0, 1, 0, 0,
-            0, 0, 0, 1, 0,
-          ]),
+  final opacity = isPressed ? 0.6 : 1.0;
+  return Opacity(
+    opacity: opacity,
     child: Image.asset(
       'packages/libras_keyboard/assets/libras/$letter.png',
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _LetterFallback(letter: letter),
     ),
   );
+}
+
+class _LetterFallback extends StatelessWidget {
+  const _LetterFallback({required this.letter});
+  final String letter;
+
+  @override
+  Widget build(BuildContext context) {
+    final isAction = letter == 'backspace' || letter == 'clear';
+    final label = switch (letter) {
+      'backspace' => '⌫',
+      'space' => '␣',
+      'clear' => '✕',
+      _ => letter.toUpperCase(),
+    };
+    return Center(
+      child: FittedBox(
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: isAction ? 16 : 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// The full Libras datilologia keyboard widget.
@@ -69,14 +123,16 @@ Widget defaultLetterBuilder(String letter, bool isPressed) {
 ///   ),
 /// )
 /// ```
-class LibrasKeyboard extends StatelessWidget {
+class LibrasKeyboard extends StatefulWidget {
   const LibrasKeyboard({
     super.key,
     required this.controller,
     this.letterBuilder,
     this.columns = 7,
+    this.numberColumns = 5,
     this.keyAspectRatio = 0.9,
     this.keySpacing = 6.0,
+    this.showModeToggle = true,
     this.backgroundColor,
     this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
   });
@@ -89,44 +145,107 @@ class LibrasKeyboard extends StatelessWidget {
   /// Number of columns in the alpha grid.
   final int columns;
 
-  /// Width-to-height ratio of each alpha key.
+  /// Number of columns in the numbers grid.
+  final int numberColumns;
+
+  /// Width-to-height ratio of each key.
   final double keyAspectRatio;
 
   /// Gap between keys.
   final double keySpacing;
 
+  /// Whether to show the ABC / 123 toggle that switches between the letter
+  /// and number layouts. When false the keyboard only shows letters.
+  final bool showModeToggle;
+
   final Color? backgroundColor;
   final EdgeInsetsGeometry padding;
 
-  LibrasLetterBuilder get _builder => letterBuilder ?? defaultLetterBuilder;
+  @override
+  State<LibrasKeyboard> createState() => _LibrasKeyboardState();
+}
+
+class _LibrasKeyboardState extends State<LibrasKeyboard> {
+  bool _showNumbers = false;
+
+  LibrasLetterBuilder get _builder =>
+      widget.letterBuilder ?? defaultLetterBuilder;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bg = backgroundColor ?? theme.colorScheme.surfaceContainer;
+    final bg = widget.backgroundColor ?? theme.colorScheme.surfaceContainer;
 
     return Container(
       color: bg,
-      padding: padding,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _AlphaGrid(
-            letters: _alphaLetters,
-            controller: controller,
-            letterBuilder: _builder,
-            columns: columns,
-            keyAspectRatio: keyAspectRatio,
-            spacing: keySpacing,
-          ),
-          SizedBox(height: keySpacing),
-          _ActionRow(
-            letters: _actionLetters,
-            controller: controller,
-            letterBuilder: _builder,
-            spacing: keySpacing,
-          ),
+      padding: widget.padding,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = _showNumbers ? widget.numberColumns : widget.columns;
+          // Derive the action-row key height from the grid cell geometry
+          // so both rows stay visually consistent.
+          final cellWidth =
+              (constraints.maxWidth - widget.keySpacing * (columns - 1)) /
+                  columns;
+          final keyHeight = cellWidth / widget.keyAspectRatio;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.showModeToggle) ...[
+                _ModeToggle(
+                  showNumbers: _showNumbers,
+                  onChanged: (v) => setState(() => _showNumbers = v),
+                ),
+                SizedBox(height: widget.keySpacing),
+              ],
+              _AlphaGrid(
+                letters: _showNumbers ? _numberLetters : _alphaLetters,
+                controller: widget.controller,
+                letterBuilder: _builder,
+                columns: columns,
+                keyAspectRatio: widget.keyAspectRatio,
+                spacing: widget.keySpacing,
+              ),
+              SizedBox(height: widget.keySpacing),
+              _ActionRow(
+                letters: _actionLetters,
+                controller: widget.controller,
+                letterBuilder: _builder,
+                spacing: widget.keySpacing,
+                keyHeight: keyHeight,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A small segmented control to switch between the ABC and 123 layouts.
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({required this.showNumbers, required this.onChanged});
+
+  final bool showNumbers;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SegmentedButton<bool>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        segments: const [
+          ButtonSegment(value: false, label: Text('ABC')),
+          ButtonSegment(value: true, label: Text('123')),
         ],
+        selected: {showNumbers},
+        onSelectionChanged: (s) => onChanged(s.first),
       ),
     );
   }
@@ -176,84 +295,40 @@ class _ActionRow extends StatelessWidget {
     required this.controller,
     required this.letterBuilder,
     required this.spacing,
+    required this.keyHeight,
   });
 
   final List<LibrasLetter> letters;
   final LibrasKeyboardController controller;
   final LibrasLetterBuilder letterBuilder;
   final double spacing;
+  final double keyHeight;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Row(
-      children: letters.map((letter) {
-        final isDestructive = letter == LibrasLetter.clear;
-        return Expanded(
-          flex: letter == LibrasLetter.space ? 3 : 1,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: spacing / 2),
-            child: LibrasKey(
-              letter: letter,
-              letterBuilder: (l, pressed) => _ActionKeyContent(
+    return SizedBox(
+      height: keyHeight,
+      child: Row(
+        children: letters.map((letter) {
+          final isDestructive = letter == LibrasLetter.clear;
+          return Expanded(
+            flex: letter == LibrasLetter.space ? 3 : 1,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: spacing / 2),
+              child: LibrasKey(
                 letter: letter,
-                isPressed: pressed,
+                letterBuilder: letterBuilder,
+                onTap: () => controller.onKey(letter),
+                backgroundColor:
+                    isDestructive ? theme.colorScheme.errorContainer : null,
+                pressedColor: isDestructive ? theme.colorScheme.error : null,
               ),
-              onTap: () => controller.onKey(letter),
-              backgroundColor: isDestructive
-                  ? theme.colorScheme.errorContainer
-                  : null,
-              pressedColor: isDestructive
-                  ? theme.colorScheme.error
-                  : null,
             ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _ActionKeyContent extends StatelessWidget {
-  const _ActionKeyContent({required this.letter, required this.isPressed});
-
-  final LibrasLetter letter;
-  final bool isPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = isPressed
-        ? Colors.white
-        : theme.colorScheme.onSurfaceVariant;
-
-    IconData icon;
-    switch (letter) {
-      case LibrasLetter.backspace:
-        icon = Icons.backspace_outlined;
-      case LibrasLetter.space:
-        icon = Icons.space_bar;
-      case LibrasLetter.clear:
-        icon = Icons.clear_all;
-      default:
-        icon = Icons.help_outline;
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 22),
-        const SizedBox(height: 2),
-        Text(
-          letter.semanticsLabel,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: color,
-            fontSize: 10,
-          ),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+          );
+        }).toList(),
+      ),
     );
   }
 }

@@ -13,7 +13,10 @@ import '../vlibras_widget_controller.dart';
 /// Stack(
 ///   children: [
 ///     YourContent(),
-///     VLibrasOverlayButton(config: VLibrasConfig()),
+///     VLibrasOverlayButton(
+///       config: VLibrasConfig(),
+///       initialText: 'Bem-vindo!',
+///     ),
 ///   ],
 /// )
 /// ```
@@ -24,19 +27,36 @@ class VLibrasOverlayButton extends StatefulWidget {
     this.controller,
     this.initialText,
     this.buttonSize = 56,
-    this.panelHeight = 300,
+    this.panelWidth = 300,
+    this.panelHeight = 220,
     this.margin = const EdgeInsets.only(bottom: 24, right: 16),
+    this.primaryColor = const Color(0xFF1351B4),
+    this.onSkip,
   });
 
   final VLibrasConfig config;
   final VLibrasPlayerController? controller;
 
   /// Text translated immediately after the player finishes loading.
+  /// Also shown as the initial subtitle in the panel footer.
   final String? initialText;
 
   final double buttonSize;
+
+  /// Width of the player panel card. Defaults to 300.
+  final double panelWidth;
+
+  /// Height of the WebView avatar area inside the panel. Defaults to 220.
   final double panelHeight;
+
   final EdgeInsetsGeometry margin;
+
+  /// Color used for the panel header, footer and FAB. Defaults to gov.br blue.
+  final Color primaryColor;
+
+  /// Called when the user taps the "Pular" (skip) button.
+  /// If null, the button still calls [VLibrasPlayerController.skip] internally.
+  final VoidCallback? onSkip;
 
   @override
   State<VLibrasOverlayButton> createState() => _VLibrasOverlayButtonState();
@@ -47,15 +67,16 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
   late final WebViewController _webController;
   late final AnimationController _anim;
   late final Animation<double> _slideAnim;
+  late final VLibrasPlayerController _ctrl;
 
   bool _isOpen = false;
   bool _isReady = false;
-  late final VLibrasPlayerController _ctrl;
+  String? _subtitleText;
 
   @override
   void initState() {
     super.initState();
-
+    _subtitleText = widget.initialText;
     _ctrl = widget.controller ?? VLibrasPlayerController();
 
     _anim = AnimationController(
@@ -69,15 +90,13 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     );
 
     _buildWebViewController();
-
-    // Listen to events so we can update isReady
     _ctrl.eventStream.listen(_handleEvent);
   }
 
   void _buildWebViewController() {
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
+      ..setBackgroundColor(Colors.white)
       ..addJavaScriptChannel(
         'VLibrasChannel',
         onMessageReceived: (msg) {
@@ -91,6 +110,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
           avatar: widget.config.avatar.name,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
+          playerHeight: widget.panelHeight,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -129,6 +149,11 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     }
   }
 
+  void _skip() {
+    _ctrl.skip();
+    widget.onSkip?.call();
+  }
+
   @override
   void dispose() {
     _anim.dispose();
@@ -138,8 +163,6 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Positioned(
       bottom: 0,
       right: 0,
@@ -153,40 +176,26 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
             // ── Player panel ──────────────────────────────────────────────
             SizeTransition(
               sizeFactor: _slideAnim,
-              child: Container(
-                height: widget.panelHeight,
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      WebViewWidget(controller: _webController),
-                      if (!_isReady)
-                        const ColoredBox(
-                          color: Colors.black87,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                                color: Colors.white),
-                          ),
-                        ),
-                    ],
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                  width: widget.panelWidth,
+                  child: _Panel(
+                    primaryColor: widget.primaryColor,
+                    panelHeight: widget.panelHeight,
+                    webController: _webController,
+                    isReady: _isReady,
+                    subtitleText: _subtitleText,
+                    onClose: _toggle,
+                    onSkip: _skip,
                   ),
                 ),
               ),
             ),
 
-            // ── Toggle button ─────────────────────────────────────────────
+            const SizedBox(height: 8),
+
+            // ── Toggle FAB ────────────────────────────────────────────────
             Semantics(
               button: true,
               label: _isOpen
@@ -195,7 +204,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
               child: Tooltip(
                 message: _isOpen ? 'Fechar Libras' : 'Abrir Libras',
                 child: Material(
-                  color: theme.colorScheme.primary,
+                  color: widget.primaryColor,
                   shape: const CircleBorder(),
                   elevation: 4,
                   child: InkWell(
@@ -207,12 +216,10 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 200),
                         child: _isOpen
-                            ? Icon(Icons.close,
-                                key: const ValueKey('close'),
-                                color: theme.colorScheme.onPrimary)
-                            : Icon(Icons.sign_language,
-                                key: const ValueKey('open'),
-                                color: theme.colorScheme.onPrimary),
+                            ? const Icon(Icons.close,
+                                key: ValueKey('close'), color: Colors.white)
+                            : const Icon(Icons.sign_language,
+                                key: ValueKey('open'), color: Colors.white),
                       ),
                     ),
                   ),
@@ -220,6 +227,222 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Panel card ────────────────────────────────────────────────────────────────
+
+class _Panel extends StatelessWidget {
+  const _Panel({
+    required this.primaryColor,
+    required this.panelHeight,
+    required this.webController,
+    required this.isReady,
+    required this.subtitleText,
+    required this.onClose,
+    required this.onSkip,
+  });
+
+  final Color primaryColor;
+  final double panelHeight;
+  final WebViewController webController;
+  final bool isReady;
+  final String? subtitleText;
+  final VoidCallback onClose;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      shadowColor: Colors.black38,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Header(primaryColor: primaryColor, onClose: onClose),
+          _AvatarArea(
+            height: panelHeight,
+            webController: webController,
+            isReady: isReady,
+            onSkip: onSkip,
+          ),
+          _SubtitleBar(primaryColor: primaryColor, text: subtitleText),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+class _Header extends StatelessWidget {
+  const _Header({required this.primaryColor, required this.onClose});
+
+  final Color primaryColor;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: primaryColor,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          children: [
+            _HeaderIcon(Icons.settings),
+            const SizedBox(width: 4),
+            _HeaderIcon(Icons.translate),
+            const Expanded(
+              child: Text(
+                'VLIBRAS',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+            _HeaderIcon(Icons.info_outline),
+            const SizedBox(width: 4),
+            _HeaderIconButton(icon: Icons.close, onTap: onClose),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon(this.icon);
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(icon, color: Colors.white, size: 20);
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+// ── Avatar area ───────────────────────────────────────────────────────────────
+
+class _AvatarArea extends StatelessWidget {
+  const _AvatarArea({
+    required this.height,
+    required this.webController,
+    required this.isReady,
+    required this.onSkip,
+  });
+
+  final double height;
+  final WebViewController webController;
+  final bool isReady;
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: Colors.white, child: WebViewWidget(controller: webController)),
+          if (!isReady)
+            const ColoredBox(
+              color: Colors.white,
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          Positioned(
+            bottom: 8,
+            right: 8,
+            child: _SkipButton(onTap: onSkip),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Skip button ───────────────────────────────────────────────────────────────
+
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 2,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.skip_next, size: 16, color: Colors.black87),
+              SizedBox(width: 4),
+              Text(
+                'Pular',
+                style: TextStyle(fontSize: 13, color: Colors.black87),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Subtitle bar ──────────────────────────────────────────────────────────────
+
+class _SubtitleBar extends StatelessWidget {
+  const _SubtitleBar({required this.primaryColor, this.text});
+  final Color primaryColor;
+  final String? text;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: primaryColor,
+      child: SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            text ?? '',
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );

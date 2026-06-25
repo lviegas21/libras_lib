@@ -33,6 +33,12 @@ class VLibrasPlayerController {
   }
 
   /// Called internally by the widget when the WebViewController is ready.
+  Future<void> skip() async {
+    await _webViewController?.runJavaScript(
+      'if(window.__vlibrasSkip) window.__vlibrasSkip();',
+    );
+  }
+
   void attach(WebViewController wvc) => _webViewController = wvc;
 
   /// Called internally to emit events from the JS channel.

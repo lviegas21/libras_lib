@@ -78,7 +78,7 @@ class _LibrasKeyState extends State<LibrasKey> {
           ),
           clipBehavior: Clip.antiAlias,
           padding: widget.padding,
-          child: widget.letterBuilder(widget.letter.name, _pressed),
+          child: widget.letterBuilder(widget.letter.assetKey, _pressed),
         ),
       ),
     );

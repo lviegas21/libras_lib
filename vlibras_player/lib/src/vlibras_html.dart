@@ -3,7 +3,7 @@
 /// This is used when the WebView navigates directly to `baseUrl/app` instead
 /// of loading a custom HTML string.  The script:
 /// - Strips CORS-problematic request headers (same as the HTML version)
-/// - Injects CSS overrides (hide chrome, scale transform)
+/// - Injects CSS overrides (hide the access button chrome)
 /// - Registers [window.__vlibrasTranslate] for Dart to call
 /// - Polls until the VLibras player element appears, then signals ready
 String buildVLibrasInitScript() {
@@ -35,21 +35,8 @@ String buildVLibrasInitScript() {
   s.textContent =
     '* { margin:0; padding:0; box-sizing:border-box; }' +
     'html,body { width:100%; height:100%; background:black; overflow:hidden; }' +
-    '[vw] { transform-origin:bottom right; }' +
-    '[vw-plugin-wrapper] { display:block !important; }' +
     '[vw-access-button] { opacity:0 !important; pointer-events:none !important; }';
   document.head.appendChild(s);
-
-  // ── Scale helper ─────────────────────────────────────────────────────────
-  function scalePlayer() {
-    var vw = document.querySelector('[vw]');
-    if (!vw) return;
-    var pw = document.querySelector('.vw-plugin-window');
-    if (!pw) return;
-    var panelW = pw.offsetWidth || 320;
-    vw.style.transformOrigin = 'bottom right';
-    vw.style.transform = 'scale(' + (window.innerWidth / panelW) + ')';
-  }
 
   // ── Translate API ────────────────────────────────────────────────────────
   window.__vlibrasTranslate = function(text) {
@@ -92,7 +79,6 @@ String buildVLibrasInitScript() {
       clearInterval(poll);
       console.log('[VLibras] plugin.player ready after ' + attempts + ' polls');
       setTimeout(function() {
-        scalePlayer();
         VLibrasChannel.postMessage(JSON.stringify({type:'ready'}));
       }, 500);
       return;
@@ -120,39 +106,52 @@ String buildVLibrasInitScript() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Builds the HTML page that hosts the VLibras widget inside a WebView.
+///
+/// Scaling strategy — `initial-scale` viewport:
+///   VLibras renders its signing avatar in a panel whose height equals
+///   `window.innerHeight`.  By setting
+///     `initial-scale = playerHeight / naturalHeight`
+///   the browser's CSS viewport height equals [naturalHeight] even though the
+///   physical WebView is only [playerHeight] px tall.  VLibras renders the
+///   avatar in [naturalHeight] CSS px; the browser scales the result down to
+///   [playerHeight] physical px automatically.  No JS transform is needed.
+///
+/// [playerHeight] — Flutter widget height in logical pixels.
+/// [naturalHeight] — virtual canvas height the VLibras Unity scene renders at.
+///   Lower values zoom in (avatar fills more of the widget, less black margin).
+///   Higher values zoom out (avatar appears smaller with more scene context).
+///   Typical useful range: 300 – 700.  Default: 500.
+/// [playerWidth] — unused for scaling; kept for API compatibility.
 String buildVLibrasHtml({
   required String baseUrl,
   required String avatar,
   required double speed,
   required bool autoPlay,
+  double? playerWidth,
+  double? playerHeight,
+  double naturalHeight = 500.0,
 }) {
+  // initial-scale = widget_height / naturalHeight
+  // window.innerHeight = physical_height / initial-scale = naturalHeight
+  // VLibras sizes its panel to window.innerHeight → renders at naturalHeight px.
+  // The browser scales that down to physical_height automatically.
+  final double _initScale =
+      (playerHeight != null && playerHeight > 0) ? playerHeight / naturalHeight : 1.0;
+  final String _initScaleStr = _initScale.toStringAsFixed(4);
+
   return '''
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+  <meta name="viewport" content="width=320,initial-scale=$_initScaleStr,user-scalable=no"/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%;
       height: 100%;
-      background: black;
+      background: white;
       overflow: hidden;
-    }
-
-    /*
-     * VLibras renders its panel as position:fixed at bottom-right.
-     * We scale it from the bottom-right origin so the panel expands
-     * left/upward to fill the WebView width exactly.
-     */
-    [vw] {
-      transform-origin: bottom right;
-    }
-
-    /* Always show the plugin wrapper */
-    [vw-plugin-wrapper] {
-      display: block !important;
     }
 
     /* Hide the circular access button — opened programmatically */
@@ -160,6 +159,13 @@ String buildVLibrasHtml({
       opacity: 0 !important;
       pointer-events: none !important;
     }
+
+    /* Hide plugin control bar (?, ···, skip). Translation is driven entirely
+       via window.plugin.player.translate() so the UI is not needed. */
+    .vw-plugin-top-wrapper {
+      display: none !important;
+    }
+
   </style>
 </head>
 <body>
@@ -209,6 +215,17 @@ String buildVLibrasHtml({
       }
     })();
 
+    // Called from Dart to skip/stop the current translation.
+    window.__vlibrasSkip = function() {
+      try {
+        var p = window.plugin;
+        if (p && p.player) {
+          if (typeof p.player.cancel === 'function') { p.player.cancel(); return; }
+          if (typeof p.player.stop   === 'function') { p.player.stop();   return; }
+        }
+      } catch(e) {}
+    };
+
     // Called from Dart to sign text.
     // VLibras 6 exposes the API as window.plugin.player.translate(text).
     window.__vlibrasTranslate = function(text) {
@@ -229,27 +246,6 @@ String buildVLibrasHtml({
         VLibrasChannel.postMessage(JSON.stringify({ type: 'error', message: e.message }));
       }
     };
-
-    /*
-     * Scale the VLibras panel to fill the viewport width exactly.
-     * The panel is bottom-right anchored; scaling from that origin expands
-     * it toward the top-left.  We use viewW/panelW (≥1 on mobile) which
-     * fills the full width and clips the top portion of the panel.
-     * This keeps the signing area (lower avatar, hands) visible.
-     */
-    function scalePlayer() {
-      var vw = document.querySelector('[vw]');
-      if (!vw) return;
-      var pluginWindow = document.querySelector('.vw-plugin-window');
-      if (!pluginWindow) return;
-
-      var panelW = pluginWindow.offsetWidth  || 320;
-      var viewW  = window.innerWidth;
-      var scale  = viewW / panelW;
-
-      vw.style.transformOrigin = 'bottom right';
-      vw.style.transform = 'scale(' + scale + ')';
-    }
   </script>
 
   <script
@@ -297,7 +293,6 @@ String buildVLibrasHtml({
             clearInterval(poll);
             console.log('[VLibras] plugin.player ready after ' + attempts + ' polls');
             setTimeout(function() {
-              scalePlayer();
               VLibrasChannel.postMessage(JSON.stringify({ type: 'ready' }));
             }, 500);
             return;
@@ -328,3 +323,4 @@ String buildVLibrasHtml({
 </html>
 ''';
 }
+

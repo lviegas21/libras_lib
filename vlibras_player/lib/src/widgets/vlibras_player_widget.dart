@@ -28,7 +28,9 @@ class VLibrasPlayerWidget extends StatefulWidget {
     this.onReady,
     this.onTranslateComplete,
     this.onError,
-    this.height = 280,
+    this.height = 200,
+    this.width,
+    this.avatarViewportHeight = 500.0,
     this.borderRadius = const BorderRadius.all(Radius.circular(12)),
     this.loadingBuilder,
     this.errorBuilder,
@@ -43,7 +45,26 @@ class VLibrasPlayerWidget extends StatefulWidget {
   final VoidCallback? onTranslateComplete;
   final ValueChanged<String>? onError;
 
+  /// Height of the player. Defaults to 200.
   final double height;
+
+  /// Width of the player. When null it is auto-computed from [avatarViewportHeight].
+  final double? width;
+
+  /// Virtual canvas height (CSS px) that the VLibras Unity scene renders at.
+  ///
+  /// Controls how much of the 3D scene is visible and therefore the apparent
+  /// size of the avatar figure:
+  ///
+  /// - **Lower value** (e.g. 380): zooms in — avatar fills more of the widget,
+  ///   less black margin above/below the figure.
+  /// - **Higher value** (e.g. 650): zooms out — avatar appears smaller with
+  ///   more scene context around it.
+  ///
+  /// The auto-computed widget width is `height × (320 / avatarViewportHeight)`.
+  /// Typical useful range: 300 – 700. Defaults to 500.
+  final double avatarViewportHeight;
+
   final BorderRadius borderRadius;
 
   /// Custom widget shown while VLibras is loading.
@@ -63,6 +84,14 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   final _state = ValueNotifier<_LoadState>(_LoadState.loading);
   String? _errorMessage;
 
+  // VLibras panel is 320 CSS px wide × avatarViewportHeight CSS px tall.
+  // At initial-scale = height/avatarViewportHeight the physical width is:
+  //   320 × (height / avatarViewportHeight) = height × (320 / avatarViewportHeight)
+  // When the caller does not provide an explicit width we auto-size to this
+  // value so the WebView exactly fits the rendered avatar with no empty sides.
+  double get _avatarWidth =>
+      widget.width ?? widget.height * (320.0 / widget.avatarViewportHeight);
+
   @override
   void initState() {
     super.initState();
@@ -78,7 +107,7 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   void _buildWebViewController() {
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
+      ..setBackgroundColor(Colors.transparent)
       ..addJavaScriptChannel(
         'VLibrasChannel',
         onMessageReceived: _onJsMessage,
@@ -89,6 +118,9 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           avatar: widget.config.avatar.name,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
+          playerWidth: _avatarWidth,
+          playerHeight: widget.height,
+          naturalHeight: widget.avatarViewportHeight,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -135,8 +167,9 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: widget.borderRadius,
-      child: SizedBox(
-        height: widget.height,
+        child: SizedBox(
+          height: widget.height,
+          width: _avatarWidth,
         child: Stack(
           fit: StackFit.expand,
           children: [
