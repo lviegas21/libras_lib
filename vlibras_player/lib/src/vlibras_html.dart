@@ -105,6 +105,69 @@ String buildVLibrasInitScript() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// CSS selectors that hide VLibras native chrome when Flutter owns the panel UI.
+const _pluginChromeHideSelectors = '''
+    .vw-plugin-top-wrapper,
+    [vw-plugin-wrapper] [class*="top-wrapper"],
+    [vw-plugin-wrapper] [class*="TopWrapper"],
+    [vw-plugin-wrapper] [class*="top-bar"],
+    [vw-plugin-wrapper] [class*="TopBar"],
+    [vw-plugin-wrapper] [class*="header"],
+    [vw-plugin-wrapper] [class*="Header"],
+    [vw-plugin-wrapper] [class*="side"],
+    [vw-plugin-wrapper] [class*="Side"],
+    [vw-plugin-wrapper] [class*="toolbar"],
+    [vw-plugin-wrapper] [class*="Toolbar"],
+    [vw-plugin-wrapper] [class*="menu"],
+    [vw-plugin-wrapper] [class*="Menu"],
+    [vw-plugin-wrapper] [class*="help"],
+    [vw-plugin-wrapper] [class*="Help"],
+    [vw-plugin-wrapper] [class*="option"],
+    [vw-plugin-wrapper] [class*="Option"],
+    [vw-plugin-wrapper] [class*="avatar-select"],
+    [vw-plugin-wrapper] [class*="AvatarSelect"],
+    [vw-plugin-wrapper] [class*="feedback"],
+    [vw-plugin-wrapper] [class*="Feedback"],
+    [vw-plugin-wrapper] [class*="progress"],
+    [vw-plugin-wrapper] [class*="Progress"],
+    [vw-plugin-wrapper] [class*="caption"],
+    [vw-plugin-wrapper] [class*="Caption"],
+    [vw-plugin-wrapper] footer,
+    [vw-plugin-wrapper] button,
+    [vw-plugin-wrapper] a[href]''';
+
+/// JS array literal of selectors passed to suppressPluginUi().
+const _pluginChromeHideSelectorsJs = '''
+            '.vw-plugin-top-wrapper',
+            '[vw-plugin-wrapper] [class*="top-wrapper"]',
+            '[vw-plugin-wrapper] [class*="TopWrapper"]',
+            '[vw-plugin-wrapper] [class*="top-bar"]',
+            '[vw-plugin-wrapper] [class*="TopBar"]',
+            '[vw-plugin-wrapper] [class*="header"]',
+            '[vw-plugin-wrapper] [class*="Header"]',
+            '[vw-plugin-wrapper] button',
+            '[vw-plugin-wrapper] a[href]',
+            '[vw-plugin-wrapper] [class*="side"]',
+            '[vw-plugin-wrapper] [class*="Side"]',
+            '[vw-plugin-wrapper] [class*="toolbar"]',
+            '[vw-plugin-wrapper] [class*="Toolbar"]',
+            '[vw-plugin-wrapper] [class*="menu"]',
+            '[vw-plugin-wrapper] [class*="Menu"]',
+            '[vw-plugin-wrapper] [class*="help"]',
+            '[vw-plugin-wrapper] [class*="Help"]',
+            '[vw-plugin-wrapper] [class*="option"]',
+            '[vw-plugin-wrapper] [class*="Option"]',
+            '[vw-plugin-wrapper] [class*="avatar-select"]',
+            '[vw-plugin-wrapper] [class*="AvatarSelect"]',
+            '[vw-plugin-wrapper] [class*="feedback"]',
+            '[vw-plugin-wrapper] [class*="Feedback"]',
+            '[vw-plugin-wrapper] [class*="progress"]',
+            '[vw-plugin-wrapper] [class*="Progress"]',
+            '[vw-plugin-wrapper] [class*="caption"]',
+            '[vw-plugin-wrapper] [class*="Caption"]',
+            '[vw-plugin-wrapper] footer',
+''';
+
 /// Builds the HTML page that hosts the VLibras widget inside a WebView.
 ///
 /// Scaling strategy — `initial-scale` viewport:
@@ -162,24 +225,15 @@ String buildVLibrasHtml({
 
     /* Hide native plugin chrome (profile, help, menu, skip, top bar).
        Translation and skip are driven from Flutter via JS bridges. */
-    .vw-plugin-top-wrapper,
-    [vw-plugin-wrapper] [class*="side"],
-    [vw-plugin-wrapper] [class*="Side"],
-    [vw-plugin-wrapper] [class*="toolbar"],
-    [vw-plugin-wrapper] [class*="Toolbar"],
-    [vw-plugin-wrapper] [class*="menu"],
-    [vw-plugin-wrapper] [class*="Menu"],
-    [vw-plugin-wrapper] [class*="help"],
-    [vw-plugin-wrapper] [class*="Help"],
-    [vw-plugin-wrapper] [class*="option"],
-    [vw-plugin-wrapper] [class*="Option"],
-    [vw-plugin-wrapper] [class*="avatar-select"],
-    [vw-plugin-wrapper] [class*="AvatarSelect"],
-    [vw-plugin-wrapper] button,
-    [vw-plugin-wrapper] a[href] {
+    $_pluginChromeHideSelectors {
       display: none !important;
       pointer-events: none !important;
       opacity: 0 !important;
+    }
+
+    /* Fallback when Unity re-injects chrome after load. */
+    [vw-plugin-wrapper] {
+      transform: translateY(-36px);
     }
 
   </style>
@@ -291,21 +345,7 @@ String buildVLibrasHtml({
         // Hide controls injected after Unity loads (profile, help, menu, etc.).
         function suppressPluginUi() {
           var selectors = [
-            '.vw-plugin-top-wrapper',
-            '[vw-plugin-wrapper] button',
-            '[vw-plugin-wrapper] a[href]',
-            '[vw-plugin-wrapper] [class*="side"]',
-            '[vw-plugin-wrapper] [class*="Side"]',
-            '[vw-plugin-wrapper] [class*="toolbar"]',
-            '[vw-plugin-wrapper] [class*="Toolbar"]',
-            '[vw-plugin-wrapper] [class*="menu"]',
-            '[vw-plugin-wrapper] [class*="Menu"]',
-            '[vw-plugin-wrapper] [class*="help"]',
-            '[vw-plugin-wrapper] [class*="Help"]',
-            '[vw-plugin-wrapper] [class*="option"]',
-            '[vw-plugin-wrapper] [class*="Option"]',
-            '[vw-plugin-wrapper] [class*="avatar-select"]',
-            '[vw-plugin-wrapper] [class*="AvatarSelect"]'
+            $_pluginChromeHideSelectorsJs
           ];
           selectors.forEach(function(sel) {
             document.querySelectorAll(sel).forEach(function(el) {
@@ -313,6 +353,9 @@ String buildVLibrasHtml({
               el.style.setProperty('pointer-events', 'none', 'important');
               el.style.setProperty('opacity', '0', 'important');
             });
+          });
+          document.querySelectorAll('[vw-plugin-wrapper]').forEach(function(el) {
+            el.style.setProperty('transform', 'translateY(-36px)', 'important');
           });
         }
 

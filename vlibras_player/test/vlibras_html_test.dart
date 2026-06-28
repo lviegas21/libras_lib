@@ -42,6 +42,7 @@ void main() {
       expect(html, contains('.vw-plugin-top-wrapper'));
       expect(html, contains('suppressPluginUi'));
       expect(html, contains('[vw-plugin-wrapper] button'));
+      expect(html, contains("'[vw-plugin-wrapper] footer',"));
     });
   });
 }
