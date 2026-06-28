@@ -231,10 +231,7 @@ String buildVLibrasHtml({
       opacity: 0 !important;
     }
 
-    /* Fallback when Unity re-injects chrome after load. */
-    [vw-plugin-wrapper] {
-      transform: translateY(-36px);
-    }
+    /* Chrome nativo oculto via display:none — sem translateY para não cortar a cabeça. */
 
   </style>
 </head>
@@ -353,9 +350,6 @@ String buildVLibrasHtml({
               el.style.setProperty('pointer-events', 'none', 'important');
               el.style.setProperty('opacity', '0', 'important');
             });
-          });
-          document.querySelectorAll('[vw-plugin-wrapper]').forEach(function(el) {
-            el.style.setProperty('transform', 'translateY(-36px)', 'important');
           });
         }
 
