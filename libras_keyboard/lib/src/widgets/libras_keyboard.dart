@@ -171,6 +171,53 @@ class _LibrasKeyboardState extends State<LibrasKeyboard> {
   LibrasLetterBuilder get _builder =>
       widget.letterBuilder ?? defaultLetterBuilder;
 
+  static const _toggleHeight = 36.0;
+  static const _minKeyHeight = 28.0;
+
+  ({double keyHeight, double keyAspectRatio, int columns, List<LibrasLetter> letters, bool needsScroll})
+      _resolveLayout(BoxConstraints constraints) {
+    final columns = _showNumbers ? widget.numberColumns : widget.columns;
+    final letters = _showNumbers ? _numberLetters : _alphaLetters;
+    final rows = (letters.length + columns - 1) ~/ columns;
+
+    final cellWidth =
+        (constraints.maxWidth - widget.keySpacing * (columns - 1)) / columns;
+    final idealKeyHeight = cellWidth / widget.keyAspectRatio;
+    var keyHeight = idealKeyHeight;
+
+    final toggleBlock =
+        widget.showModeToggle ? _toggleHeight + widget.keySpacing : 0.0;
+
+    double totalHeight(double kh) =>
+        toggleBlock +
+        widget.keySpacing +
+        rows * kh +
+        (rows - 1) * widget.keySpacing +
+        kh;
+
+    final maxHeight = constraints.maxHeight;
+    if (maxHeight.isFinite && totalHeight(keyHeight) > maxHeight) {
+      keyHeight = (maxHeight -
+              toggleBlock -
+              widget.keySpacing -
+              (rows - 1) * widget.keySpacing) /
+          (rows + 1);
+      keyHeight = keyHeight.clamp(_minKeyHeight, idealKeyHeight);
+    }
+
+    final needsScroll =
+        maxHeight.isFinite && totalHeight(keyHeight) > maxHeight + 0.5;
+    final keyAspectRatio = cellWidth / keyHeight;
+
+    return (
+      keyHeight: keyHeight,
+      keyAspectRatio: keyAspectRatio,
+      columns: columns,
+      letters: letters,
+      needsScroll: needsScroll,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -181,15 +228,9 @@ class _LibrasKeyboardState extends State<LibrasKeyboard> {
       padding: widget.padding,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final columns = _showNumbers ? widget.numberColumns : widget.columns;
-          // Derive the action-row key height from the grid cell geometry
-          // so both rows stay visually consistent.
-          final cellWidth =
-              (constraints.maxWidth - widget.keySpacing * (columns - 1)) /
-                  columns;
-          final keyHeight = cellWidth / widget.keyAspectRatio;
+          final layout = _resolveLayout(constraints);
 
-          return Column(
+          final keyboard = Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.showModeToggle) ...[
@@ -200,11 +241,11 @@ class _LibrasKeyboardState extends State<LibrasKeyboard> {
                 SizedBox(height: widget.keySpacing),
               ],
               _AlphaGrid(
-                letters: _showNumbers ? _numberLetters : _alphaLetters,
+                letters: layout.letters,
                 controller: widget.controller,
                 letterBuilder: _builder,
-                columns: columns,
-                keyAspectRatio: widget.keyAspectRatio,
+                columns: layout.columns,
+                keyAspectRatio: layout.keyAspectRatio,
                 spacing: widget.keySpacing,
               ),
               SizedBox(height: widget.keySpacing),
@@ -213,10 +254,15 @@ class _LibrasKeyboardState extends State<LibrasKeyboard> {
                 controller: widget.controller,
                 letterBuilder: _builder,
                 spacing: widget.keySpacing,
-                keyHeight: keyHeight,
+                keyHeight: layout.keyHeight,
               ),
             ],
           );
+
+          if (layout.needsScroll) {
+            return SingleChildScrollView(child: keyboard);
+          }
+          return keyboard;
         },
       ),
     );

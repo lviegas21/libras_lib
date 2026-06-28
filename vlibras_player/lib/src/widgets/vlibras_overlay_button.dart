@@ -107,7 +107,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
       ..loadHtmlString(
         buildVLibrasHtml(
           baseUrl: widget.config.baseUrl,
-          avatar: widget.config.avatar.name,
+          avatar: widget.config.avatar.apiId,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
           playerHeight: widget.panelHeight,

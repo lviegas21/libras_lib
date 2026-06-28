@@ -243,6 +243,7 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
   final _playerController = VLibrasPlayerController();
   bool _isReady = false;
   String _subtitle = 'Digite uma palavra e toque em ▶';
+  VLibrasAvatar _avatar = VLibrasAvatar.guga;
 
   @override
   void initState() {
@@ -263,6 +264,46 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
     if (t.isNotEmpty) {
       setState(() => _subtitle = t);
       _playerController.translate(t);
+    }
+  }
+
+  Future<void> _pickAvatar() async {
+    final selected = await showModalBottomSheet<VLibrasAvatar>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text(
+                'Escolher avatar',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ...VLibrasAvatar.values.map(
+              (avatar) => ListTile(
+                title: Text(avatar.displayName),
+                subtitle: Text(avatar.description),
+                trailing: _avatar == avatar
+                    ? Icon(Icons.check,
+                        color: Theme.of(context).colorScheme.primary)
+                    : null,
+                onTap: () => Navigator.pop(context, avatar),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (selected != null && selected != _avatar && mounted) {
+      setState(() {
+        _avatar = selected;
+        _isReady = false;
+      });
     }
   }
 
@@ -306,8 +347,15 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
                             horizontal: 12, vertical: 8),
                         child: Row(
                           children: [
-                            const Icon(Icons.settings,
-                                color: Colors.white, size: 20),
+                            InkWell(
+                              onTap: _pickAvatar,
+                              borderRadius: BorderRadius.circular(4),
+                              child: const Padding(
+                                padding: EdgeInsets.all(2),
+                                child: Icon(Icons.settings,
+                                    color: Colors.white, size: 20),
+                              ),
+                            ),
                             const SizedBox(width: 6),
                             const Icon(Icons.translate,
                                 color: Colors.white, size: 20),
@@ -347,8 +395,7 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
                                 minWidth: _avatarFullWidth,
                                 maxWidth: _avatarFullWidth,
                                 child: VLibrasPlayerWidget(
-                                  config: const VLibrasConfig(
-                                      avatar: VLibrasAvatar.guga),
+                                  config: VLibrasConfig(avatar: _avatar),
                                   controller: _playerController,
                                   width: _avatarFullWidth,
                                   height: _avatarHeight,

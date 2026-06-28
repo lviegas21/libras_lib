@@ -20,6 +20,30 @@ enum VLibrasAvatar {
         return 'guga';
     }
   }
+
+  /// Human-readable name shown in avatar pickers.
+  String get displayName {
+    switch (this) {
+      case VLibrasAvatar.icaro:
+        return 'Ícaro';
+      case VLibrasAvatar.hosana:
+        return 'Hosana';
+      case VLibrasAvatar.guga:
+        return 'Guga';
+    }
+  }
+
+  /// Short description for selection UI.
+  String get description {
+    switch (this) {
+      case VLibrasAvatar.icaro:
+        return 'Avatar masculino';
+      case VLibrasAvatar.hosana:
+        return 'Avatar feminino';
+      case VLibrasAvatar.guga:
+        return 'Avatar infantil';
+    }
+  }
 }
 
 /// Configuration passed to [VLibrasPlayer.initialize].

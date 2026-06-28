@@ -78,7 +78,8 @@ class VLibrasPlayerWidget extends StatefulWidget {
 }
 
 class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
-  late final WebViewController _webController;
+  late WebViewController _webController;
+  int _webViewKey = 0;
 
   // ValueNotifier avoids rebuilding the WebViewWidget when the state changes.
   final _state = ValueNotifier<_LoadState>(_LoadState.loading);
@@ -104,7 +105,25 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
     super.dispose();
   }
 
-  void _buildWebViewController() {
+  @override
+  void didUpdateWidget(covariant VLibrasPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final configChanged = oldWidget.config.avatar != widget.config.avatar ||
+        oldWidget.config.speed != widget.config.speed ||
+        oldWidget.config.autoPlay != widget.config.autoPlay ||
+        oldWidget.config.baseUrl != widget.config.baseUrl;
+    final layoutChanged = oldWidget.height != widget.height ||
+        oldWidget.width != widget.width ||
+        oldWidget.avatarViewportHeight != widget.avatarViewportHeight;
+
+    if (configChanged || layoutChanged) {
+      _state.value = _LoadState.loading;
+      _errorMessage = null;
+      _buildWebViewController(reload: true);
+    }
+  }
+
+  void _buildWebViewController({bool reload = false}) {
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
@@ -115,7 +134,7 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
       ..loadHtmlString(
         buildVLibrasHtml(
           baseUrl: widget.config.baseUrl,
-          avatar: widget.config.avatar.name,
+          avatar: widget.config.avatar.apiId,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
           playerWidth: _avatarWidth,
@@ -126,6 +145,7 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
       );
 
     widget.controller?.attach(_webController);
+    if (reload && mounted) setState(() => _webViewKey++);
   }
 
   void _onJsMessage(JavaScriptMessage message) {
@@ -174,7 +194,11 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           fit: StackFit.expand,
           children: [
             // WebView is always in the tree and never rebuilt — avoids flicker.
-            WebViewWidget(controller: _webController),
+            // Key changes when config/layout reloads the underlying controller.
+            WebViewWidget(
+              key: ValueKey(_webViewKey),
+              controller: _webController,
+            ),
 
             // Overlays use ValueListenableBuilder so only they rebuild, not
             // the WebViewWidget above.

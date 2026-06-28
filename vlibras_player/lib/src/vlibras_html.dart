@@ -160,10 +160,26 @@ String buildVLibrasHtml({
       pointer-events: none !important;
     }
 
-    /* Hide plugin control bar (?, ···, skip). Translation is driven entirely
-       via window.plugin.player.translate() so the UI is not needed. */
-    .vw-plugin-top-wrapper {
+    /* Hide native plugin chrome (profile, help, menu, skip, top bar).
+       Translation and skip are driven from Flutter via JS bridges. */
+    .vw-plugin-top-wrapper,
+    [vw-plugin-wrapper] [class*="side"],
+    [vw-plugin-wrapper] [class*="Side"],
+    [vw-plugin-wrapper] [class*="toolbar"],
+    [vw-plugin-wrapper] [class*="Toolbar"],
+    [vw-plugin-wrapper] [class*="menu"],
+    [vw-plugin-wrapper] [class*="Menu"],
+    [vw-plugin-wrapper] [class*="help"],
+    [vw-plugin-wrapper] [class*="Help"],
+    [vw-plugin-wrapper] [class*="option"],
+    [vw-plugin-wrapper] [class*="Option"],
+    [vw-plugin-wrapper] [class*="avatar-select"],
+    [vw-plugin-wrapper] [class*="AvatarSelect"],
+    [vw-plugin-wrapper] button,
+    [vw-plugin-wrapper] a[href] {
       display: none !important;
+      pointer-events: none !important;
+      opacity: 0 !important;
     }
 
   </style>
@@ -175,6 +191,14 @@ String buildVLibrasHtml({
       <div class="vw-plugin-top-wrapper"></div>
     </div>
   </div>
+
+  <script>
+    window.__vlibrasConfig = {
+      avatar: '$avatar',
+      speed: $speed,
+      autoPlay: $autoPlay,
+    };
+  </script>
 
   <script>
     /*
@@ -259,7 +283,38 @@ String buildVLibrasHtml({
         // Initialise the VLibras Widget.  The Widget constructor sets window.onload
         // to register its internal click handler.  If the page's load event has
         // already fired (common with loadHtmlString in WebView), call it manually.
-        new window.VLibras.Widget('$baseUrl');
+        new window.VLibras.Widget({
+          rootPath: '$baseUrl',
+          avatar: '$avatar',
+        });
+
+        // Hide controls injected after Unity loads (profile, help, menu, etc.).
+        function suppressPluginUi() {
+          var selectors = [
+            '.vw-plugin-top-wrapper',
+            '[vw-plugin-wrapper] button',
+            '[vw-plugin-wrapper] a[href]',
+            '[vw-plugin-wrapper] [class*="side"]',
+            '[vw-plugin-wrapper] [class*="Side"]',
+            '[vw-plugin-wrapper] [class*="toolbar"]',
+            '[vw-plugin-wrapper] [class*="Toolbar"]',
+            '[vw-plugin-wrapper] [class*="menu"]',
+            '[vw-plugin-wrapper] [class*="Menu"]',
+            '[vw-plugin-wrapper] [class*="help"]',
+            '[vw-plugin-wrapper] [class*="Help"]',
+            '[vw-plugin-wrapper] [class*="option"]',
+            '[vw-plugin-wrapper] [class*="Option"]',
+            '[vw-plugin-wrapper] [class*="avatar-select"]',
+            '[vw-plugin-wrapper] [class*="AvatarSelect"]'
+          ];
+          selectors.forEach(function(sel) {
+            document.querySelectorAll(sel).forEach(function(el) {
+              el.style.setProperty('display', 'none', 'important');
+              el.style.setProperty('pointer-events', 'none', 'important');
+              el.style.setProperty('opacity', '0', 'important');
+            });
+          });
+        }
 
         if (document.readyState === 'complete' && typeof window.onload === 'function') {
           window.onload();
@@ -270,6 +325,7 @@ String buildVLibrasHtml({
 
         var poll = setInterval(function() {
           attempts++;
+          suppressPluginUi();
 
           // Click the access button ONCE to open the panel and trigger
           // window.plugin = new VLibras.Plugin({...}).
