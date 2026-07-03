@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
     via WKWebView on iOS, exposing a MethodChannel + EventChannel to Dart.
   DESC
   s.homepage         = 'https://vlibras.gov.br'
-  s.license          = { :file => '../LICENSE' }
+  s.license          = { :type => 'MIT' }
   s.author           = { 'Your Org' => 'dev@yourorg.com' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
