@@ -1,2 +1,5 @@
 # This is a generated file; do not edit or check into version control.
-vlibras_player=C:\\Users\\lucas\\Documents\\code\\app\\libs\\vlibras_player\\
+vlibras_player=/Users/admin/Documents/libras_lib/vlibras_player/
+webview_flutter=/Users/admin/.pub-cache/hosted/pub.dev/webview_flutter-4.13.0/
+webview_flutter_android=/Users/admin/.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.1/
+webview_flutter_wkwebview=/Users/admin/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.0/
