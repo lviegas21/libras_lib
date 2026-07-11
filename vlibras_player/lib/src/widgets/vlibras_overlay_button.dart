@@ -93,6 +93,10 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     _ctrl.eventStream.listen(_handleEvent);
   }
 
+  /// Canvas height so the scaled 320 CSS-wide panel matches [panelWidth].
+  double get _avatarViewportHeight =>
+      widget.panelHeight * kVLibrasPanelCssWidth / widget.panelWidth;
+
   void _buildWebViewController() {
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -110,7 +114,9 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
           avatar: widget.config.avatar.apiId,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
+          playerWidth: widget.panelWidth,
           playerHeight: widget.panelHeight,
+          naturalHeight: _avatarViewportHeight,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -260,18 +266,27 @@ class _Panel extends StatelessWidget {
       elevation: 8,
       borderRadius: BorderRadius.circular(12),
       shadowColor: Colors.black38,
-      clipBehavior: Clip.antiAlias,
+      // Platform views (WebView) mis-position under ancestor clips on iOS.
+      clipBehavior: Clip.none,
+      color: Colors.white,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Header(primaryColor: primaryColor, onClose: onClose),
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: _Header(primaryColor: primaryColor, onClose: onClose),
+          ),
           _AvatarArea(
             height: panelHeight,
             webController: webController,
             isReady: isReady,
             onSkip: onSkip,
           ),
-          _SubtitleBar(primaryColor: primaryColor, text: subtitleText),
+          ClipRRect(
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(12)),
+            child: _SubtitleBar(primaryColor: primaryColor, text: subtitleText),
+          ),
         ],
       ),
     );
@@ -369,7 +384,10 @@ class _AvatarArea extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          ColoredBox(color: Colors.white, child: WebViewWidget(controller: webController)),
+          ColoredBox(
+            color: Colors.white,
+            child: WebViewWidget(controller: webController),
+          ),
           if (!isReady)
             const ColoredBox(
               color: Colors.white,

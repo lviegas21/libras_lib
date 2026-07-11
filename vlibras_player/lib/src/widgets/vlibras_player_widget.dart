@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../models/vlibras_config.dart';
@@ -11,13 +12,18 @@ import '../vlibras_widget_controller.dart';
 /// the Flutter widget tree. Pass a [VLibrasPlayerController] to translate
 /// text programmatically.
 ///
-/// ```dart
-/// final ctrl = VLibrasPlayerController();
+/// Flutter should own header / footer chrome. For **only the signing figure**,
+/// use [VLibrasPlayerWidget.avatarOnly] (or a portrait [visibleWidth] + low
+/// [avatarViewportHeight]) centered inside your card:
 ///
-/// VLibrasPlayerWidget(
-///   config: VLibrasConfig(avatar: VLibrasAvatar.hosana),
-///   controller: ctrl,
-///   onReady: () => ctrl.translate('Olá, bem-vindo!'),
+/// ```dart
+/// final stage = vlibrasAvatarStage(maxWidth: cardW, maxHeight: 260);
+/// Center(
+///   child: VLibrasPlayerWidget.avatarOnly(
+///     height: stage.height,
+///     visibleWidth: stage.width,
+///     controller: ctrl,
+///   ),
 /// )
 /// ```
 class VLibrasPlayerWidget extends StatefulWidget {
@@ -30,11 +36,50 @@ class VLibrasPlayerWidget extends StatefulWidget {
     this.onError,
     this.height = 200,
     this.width,
+    this.visibleWidth,
+    this.contentAlignment = Alignment.center,
     this.avatarViewportHeight = 500.0,
     this.borderRadius = const BorderRadius.all(Radius.circular(12)),
     this.loadingBuilder,
     this.errorBuilder,
   });
+
+  /// Close-up of the signing figure only (hide empty scene; Flutter owns UI).
+  ///
+  /// Uses a tight [avatarViewportHeight] and centers the Unity crop. Pair with
+  /// a portrait [visibleWidth] from [vlibrasAvatarStage] for best results.
+  factory VLibrasPlayerWidget.avatarOnly({
+    Key? key,
+    VLibrasConfig config = const VLibrasConfig(),
+    VLibrasPlayerController? controller,
+    VoidCallback? onReady,
+    VoidCallback? onTranslateComplete,
+    ValueChanged<String>? onError,
+    required double height,
+    double? visibleWidth,
+    Alignment contentAlignment = Alignment.center,
+    double avatarViewportHeight = kVLibrasAvatarOnlyViewport,
+    BorderRadius borderRadius = BorderRadius.zero,
+    WidgetBuilder? loadingBuilder,
+    Widget Function(BuildContext context, String error)? errorBuilder,
+  }) {
+    final width = visibleWidth ?? height * kVLibrasAvatarStageAspect;
+    return VLibrasPlayerWidget(
+      key: key,
+      config: config,
+      controller: controller,
+      onReady: onReady,
+      onTranslateComplete: onTranslateComplete,
+      onError: onError,
+      height: height,
+      visibleWidth: width,
+      contentAlignment: contentAlignment,
+      avatarViewportHeight: avatarViewportHeight,
+      borderRadius: borderRadius,
+      loadingBuilder: loadingBuilder,
+      errorBuilder: errorBuilder,
+    );
+  }
 
   final VLibrasConfig config;
 
@@ -48,21 +93,29 @@ class VLibrasPlayerWidget extends StatefulWidget {
   /// Height of the player. Defaults to 200.
   final double height;
 
-  /// Width of the player. When null it is auto-computed from [avatarViewportHeight].
+  /// Explicit WebView width. Prefer [visibleWidth] for cropped cards.
+  ///
+  /// When null, width is derived from [visibleWidth] or from
+  /// `height × ([kVLibrasPanelCssWidth] / [avatarViewportHeight])`.
   final double? width;
 
-  /// Virtual canvas height (CSS px) that the VLibras Unity scene renders at.
+  /// Visible frame width. The WebView is sized to this width; side crop / zoom
+  /// is applied in HTML (platform-view safe) using [avatarViewportHeight] and
+  /// [contentAlignment].
+  final double? visibleWidth;
+
+  /// Optical alignment of the zoomed Unity scene inside the frame.
+  /// Defaults to [Alignment.center].
+  final Alignment contentAlignment;
+
+  /// Virtual canvas height (CSS px) that controls avatar zoom.
   ///
-  /// Controls how much of the 3D scene is visible and therefore the apparent
-  /// size of the avatar figure:
+  /// - **Lower value** (e.g. 200): zooms in — avatar fills more of the widget.
+  /// - **Higher value** (e.g. 650): zooms out — more scene context.
   ///
-  /// - **Lower value** (e.g. 380): zooms in — avatar fills more of the widget,
-  ///   less black margin above/below the figure.
-  /// - **Higher value** (e.g. 650): zooms out — avatar appears smaller with
-  ///   more scene context around it.
-  ///
-  /// The auto-computed widget width is `height × (320 / avatarViewportHeight)`.
-  /// Typical useful range: 300 – 700. Defaults to 500.
+  /// When [visibleWidth] is set, values below the fill-width canvas height
+  /// crop the sides via CSS `scale`. Typical useful range: 180 – 700.
+  /// Defaults to 500. Prefer [kVLibrasAvatarOnlyViewport] for figure-only UI.
   final double avatarViewportHeight;
 
   final BorderRadius borderRadius;
@@ -85,13 +138,31 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   final _state = ValueNotifier<_LoadState>(_LoadState.loading);
   String? _errorMessage;
 
-  // VLibras panel is 320 CSS px wide × avatarViewportHeight CSS px tall.
-  // At initial-scale = height/avatarViewportHeight the physical width is:
-  //   320 × (height / avatarViewportHeight) = height × (320 / avatarViewportHeight)
-  // When the caller does not provide an explicit width we auto-size to this
-  // value so the WebView exactly fits the rendered avatar with no empty sides.
-  double get _avatarWidth =>
-      widget.width ?? widget.height * (320.0 / widget.avatarViewportHeight);
+  /// Width of the Flutter WebView / visible frame.
+  double get _frameWidth {
+    if (widget.visibleWidth != null) return widget.visibleWidth!;
+    if (widget.width != null) return widget.width!;
+    return vlibrasNaturalWidth(
+      height: widget.height,
+      avatarViewportHeight: widget.avatarViewportHeight,
+    );
+  }
+
+  /// Canvas height that makes the 320 CSS panel exactly fill [_frameWidth].
+  double get _fillNaturalHeight =>
+      widget.height * kVLibrasPanelCssWidth / _frameWidth;
+
+  /// Extra CSS zoom when [avatarViewportHeight] asks for a tighter crop.
+  double get _contentZoom {
+    final fill = _fillNaturalHeight;
+    final desired = widget.avatarViewportHeight;
+    if (desired <= 0 || desired >= fill) return 1.0;
+    return fill / desired;
+  }
+
+  /// transform-origin in 0..1 from [contentAlignment].
+  double get _originX => (widget.contentAlignment.x + 1) / 2;
+  double get _originY => (widget.contentAlignment.y + 1) / 2;
 
   @override
   void initState() {
@@ -114,7 +185,9 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
         oldWidget.config.baseUrl != widget.config.baseUrl;
     final layoutChanged = oldWidget.height != widget.height ||
         oldWidget.width != widget.width ||
-        oldWidget.avatarViewportHeight != widget.avatarViewportHeight;
+        oldWidget.visibleWidth != widget.visibleWidth ||
+        oldWidget.avatarViewportHeight != widget.avatarViewportHeight ||
+        oldWidget.contentAlignment != widget.contentAlignment;
 
     if (configChanged || layoutChanged) {
       _state.value = _LoadState.loading;
@@ -137,9 +210,13 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           avatar: widget.config.avatar.apiId,
           speed: widget.config.speed,
           autoPlay: widget.config.autoPlay,
-          playerWidth: _avatarWidth,
+          playerWidth: _frameWidth,
           playerHeight: widget.height,
-          naturalHeight: widget.avatarViewportHeight,
+          // Fill the WebView width; extra zoom is applied via contentZoom.
+          naturalHeight: _fillNaturalHeight,
+          contentZoom: _contentZoom,
+          originX: _originX,
+          originY: _originY,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -185,88 +262,84 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: widget.borderRadius,
-        child: SizedBox(
-          height: widget.height,
-          width: _avatarWidth,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // WebView is always in the tree and never rebuilt — avoids flicker.
-            // Key changes when config/layout reloads the underlying controller.
-            WebViewWidget(
-              key: ValueKey(_webViewKey),
-              controller: _webController,
-            ),
-
-            // Overlays use ValueListenableBuilder so only they rebuild, not
-            // the WebViewWidget above.
-            ValueListenableBuilder<_LoadState>(
-              valueListenable: _state,
-              builder: (context, state, _) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Loading overlay — fades out when ready
-                    AnimatedOpacity(
-                      opacity: state == _LoadState.loading ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 600),
-                      child: ColoredBox(
-                        color: Colors.black,
-                        child: widget.loadingBuilder?.call(context) ??
-                            const Center(
+    // Do NOT wrap the WebView in ClipRRect on iOS — platform views are
+    // mis-positioned (often shifted left) when an ancestor clips them.
+    final frame = SizedBox(
+      height: widget.height,
+      width: _frameWidth,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          WebViewWidget(
+            key: ValueKey(_webViewKey),
+            controller: _webController,
+          ),
+          ValueListenableBuilder<_LoadState>(
+            valueListenable: _state,
+            builder: (context, state, _) {
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedOpacity(
+                    opacity: state == _LoadState.loading ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 600),
+                    child: ColoredBox(
+                      color: Colors.black,
+                      child: widget.loadingBuilder?.call(context) ??
+                          const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                    color: Colors.white),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Carregando VLibras…',
+                                  style: TextStyle(color: Colors.white70),
+                                ),
+                              ],
+                            ),
+                          ),
+                    ),
+                  ),
+                  if (state == _LoadState.error)
+                    ColoredBox(
+                      color: Colors.black87,
+                      child: widget.errorBuilder
+                              ?.call(context, _errorMessage ?? 'Erro') ??
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  CircularProgressIndicator(
-                                      color: Colors.white),
-                                  SizedBox(height: 12),
+                                  const Icon(Icons.error_outline,
+                                      color: Colors.red, size: 40),
+                                  const SizedBox(height: 8),
                                   Text(
-                                    'Carregando VLibras…',
-                                    style: TextStyle(color: Colors.white70),
+                                    _errorMessage ??
+                                        'Erro ao carregar VLibras',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 ],
                               ),
                             ),
-                      ),
+                          ),
                     ),
-
-                    // Error overlay
-                    if (state == _LoadState.error)
-                      ColoredBox(
-                        color: Colors.black87,
-                        child: widget.errorBuilder
-                                ?.call(context, _errorMessage ?? 'Erro') ??
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.error_outline,
-                                        color: Colors.red, size: 40),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _errorMessage ??
-                                          'Erro ao carregar VLibras',
-                                      textAlign: TextAlign.center,
-                                      style:
-                                          const TextStyle(color: Colors.red),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
+
+    final radius = widget.borderRadius;
+    final canClip = radius != BorderRadius.zero &&
+        defaultTargetPlatform != TargetPlatform.iOS;
+    if (!canClip) return frame;
+    return ClipRRect(borderRadius: radius, child: frame);
   }
 }
 

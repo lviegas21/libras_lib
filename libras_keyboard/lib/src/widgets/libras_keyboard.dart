@@ -262,6 +262,17 @@ class _LibrasKeyboardState extends State<LibrasKeyboard> {
           if (layout.needsScroll) {
             return SingleChildScrollView(child: keyboard);
           }
+          // Still bound to max height so a 1px rounding error never paints
+          // yellow/black overflow stripes into the parent.
+          if (constraints.maxHeight.isFinite) {
+            return SizedBox(
+              height: constraints.maxHeight,
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: keyboard,
+              ),
+            );
+          }
           return keyboard;
         },
       ),

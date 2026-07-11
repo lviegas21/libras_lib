@@ -227,16 +227,10 @@ class _KeyboardWithPlayerPage extends StatefulWidget {
 class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
   static const _primaryColor = Color(0xFF1351B4);
 
-  // The VLibras content is 320 CSS px wide and scales by height / viewport.
-  // The avatar's natural rendered width is height * (320 / viewport). The
-  // avatar figure sits in the centre with empty scene space on the sides, so
-  // we render it at full width and crop the sides to a narrower visible card —
-  // trimming lateral space without shrinking the avatar (height untouched).
-  static const double _avatarHeight = 240;
-  static const double _avatarViewport = 280;
-  static const double _avatarFullWidth =
-      _avatarHeight * (320.0 / _avatarViewport);
-  static const double _cardWidth = 200;
+  // Component sized to the avatar frame only (no unused side chrome).
+  static const double _maxFrameWidth = 170;
+  static const double _maxFrameHeight = 220;
+  static const double _stageHeightFraction = 0.26;
 
   final _textController = TextEditingController();
   late final LibrasKeyboardController _kbController;
@@ -315,193 +309,221 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
     super.dispose();
   }
 
+  ({double frameWidth, double frameHeight}) _layoutFor(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final stage = vlibrasAvatarStage(
+      maxWidth: _maxFrameWidth,
+      maxHeight:
+          (size.height * _stageHeightFraction).clamp(170.0, _maxFrameHeight),
+    );
+    // Card == frame: no empty white band beside the WebView.
+    return (frameWidth: stage.width, frameHeight: stage.height);
+  }
+
+  Widget _buildCard(double frameWidth, double frameHeight) {
+    const radius = 12.0;
+    return SizedBox(
+      width: frameWidth,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(radius)),
+              child: ColoredBox(
+                color: _primaryColor,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: _pickAvatar,
+                        borderRadius: BorderRadius.circular(4),
+                        child: const Padding(
+                          padding: EdgeInsets.all(2),
+                          child: Icon(Icons.settings,
+                              color: Colors.white, size: 18),
+                        ),
+                      ),
+                      const Expanded(
+                        child: Text(
+                          'VLIBRAS',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.info_outline,
+                          color: Colors.white, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // WebView fills the frame exactly — component width = avatar width.
+            SizedBox(
+              height: frameHeight,
+              width: frameWidth,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  VLibrasPlayerWidget.avatarOnly(
+                    config: VLibrasConfig(avatar: _avatar),
+                    controller: _playerController,
+                    height: frameHeight,
+                    visibleWidth: frameWidth,
+                    onReady: () => setState(() => _isReady = true),
+                  ),
+                  if (!_isReady)
+                    const ColoredBox(
+                      color: Colors.white,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  Positioned(
+                    bottom: 6,
+                    right: 6,
+                    child: Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      elevation: 2,
+                      child: InkWell(
+                        onTap: () => _playerController.skip(),
+                        borderRadius: BorderRadius.circular(16),
+                        child: const Padding(
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.skip_next,
+                                  size: 14, color: Colors.black87),
+                              SizedBox(width: 2),
+                              Text('Pular',
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.black87)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(radius)),
+              child: ColoredBox(
+                color: _primaryColor,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Text(
+                      _subtitle,
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final layout = _layoutFor(context);
+    final frameWidth = layout.frameWidth;
+    final frameHeight = layout.frameHeight;
+    // Input stays usable even when the avatar frame is compact.
+    final inputWidth =
+        (MediaQuery.sizeOf(context).width * 0.85).clamp(frameWidth, 360.0);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Teclado Libras + Player'),
         backgroundColor: _primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // ── VLibras panel card ─────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: SizedBox(
-              width: _cardWidth,
-              child: Material(
-                elevation: 6,
-                borderRadius: BorderRadius.circular(12),
-                shadowColor: Colors.black26,
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header
-                    ColoredBox(
-                      color: _primaryColor,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Row(
-                          children: [
-                            InkWell(
-                              onTap: _pickAvatar,
-                              borderRadius: BorderRadius.circular(4),
-                              child: const Padding(
-                                padding: EdgeInsets.all(2),
-                                child: Icon(Icons.settings,
-                                    color: Colors.white, size: 20),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Icon(Icons.translate,
-                                color: Colors.white, size: 20),
-                            const Expanded(
-                              child: Text(
-                                'VLIBRAS',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ),
-                            const Icon(Icons.info_outline,
-                                color: Colors.white, size: 20),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Avatar area
-                    SizedBox(
-                      height: _avatarHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          // Render the avatar at its full natural width and crop
-                          // the empty side scene to the narrower card width.
-                          ColoredBox(
-                            color: Colors.white,
-                            child: ClipRect(
-                              child: OverflowBox(
-                                // Negative x shifts the iframe content rightward
-                                // within the cropped view.
-                                alignment: const Alignment(0.70, 0),
-                                minWidth: _avatarFullWidth,
-                                maxWidth: _avatarFullWidth,
-                                child: VLibrasPlayerWidget(
-                                  config: VLibrasConfig(avatar: _avatar),
-                                  controller: _playerController,
-                                  width: _avatarFullWidth,
-                                  height: _avatarHeight,
-                                  avatarViewportHeight: _avatarViewport,
-                                  borderRadius: BorderRadius.zero,
-                                  onReady: () =>
-                                      setState(() => _isReady = true),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (!_isReady)
-                            const ColoredBox(
-                              color: Colors.white,
-                              child: Center(child: CircularProgressIndicator()),
-                            ),
-                          Positioned(
-                            bottom: 8,
-                            right: 8,
-                            child: Material(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              elevation: 2,
-                              child: InkWell(
-                                onTap: () => _playerController.skip(),
-                                borderRadius: BorderRadius.circular(20),
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.skip_next,
-                                          size: 16, color: Colors.black87),
-                                      SizedBox(width: 4),
-                                      Text('Pular',
-                                          style: TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.black87)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Subtitle bar
-                    ColoredBox(
-                      color: _primaryColor,
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          child: Text(
-                            _subtitle,
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Input row ─────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: SizedBox(
-              width: _cardWidth,
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
               child: Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Texto digitado em Libras',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _translate,
-                    style:
-                        FilledButton.styleFrom(backgroundColor: _primaryColor),
-                    child: const Icon(Icons.sign_language),
-                  ),
+                  const Spacer(),
+                  _buildCard(frameWidth, frameHeight),
+                  const Spacer(),
                 ],
               ),
             ),
-          ),
-
-          // ── Keyboard ──────────────────────────────────────────────────
-          Flexible(
-            child: LibrasKeyboard(controller: _kbController),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  const Spacer(),
+                  SizedBox(
+                    width: inputWidth,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Texto digitado em Libras',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _translate,
+                          style: FilledButton.styleFrom(
+                              backgroundColor: _primaryColor),
+                          child: const Icon(Icons.sign_language),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ClipRect(
+                child: LibrasKeyboard(controller: _kbController),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -168,6 +168,41 @@ const _pluginChromeHideSelectorsJs = '''
             '[vw-plugin-wrapper] footer',
 ''';
 
+/// Design width of the official VLibras web plugin panel, in CSS pixels.
+const double kVLibrasPanelCssWidth = 320.0;
+
+/// Default virtual canvas height for an avatar-only close-up (Flutter owns chrome).
+const double kVLibrasAvatarOnlyViewport = 200.0;
+
+/// Width/height of a portrait stage that frames mainly the signing figure.
+const double kVLibrasAvatarStageAspect = 0.72;
+
+/// Flutter logical width that matches the scaled VLibras panel for a given
+/// widget [height] and virtual canvas [avatarViewportHeight].
+double vlibrasNaturalWidth({
+  required double height,
+  required double avatarViewportHeight,
+}) =>
+    height * (kVLibrasPanelCssWidth / avatarViewportHeight);
+
+/// Portrait [width] × [height] for an avatar-only stage inside a larger card.
+///
+/// Prefer this over stretching the WebView to full card width — a portrait
+/// window + tight [kVLibrasAvatarOnlyViewport] shows mostly the figure.
+({double width, double height}) vlibrasAvatarStage({
+  required double maxWidth,
+  required double maxHeight,
+  double aspect = kVLibrasAvatarStageAspect,
+}) {
+  var height = maxHeight;
+  var width = height * aspect;
+  if (width > maxWidth) {
+    width = maxWidth;
+    height = width / aspect;
+  }
+  return (width: width, height: height);
+}
+
 /// Builds the HTML page that hosts the VLibras widget inside a WebView.
 ///
 /// Scaling strategy — `initial-scale` viewport:
@@ -177,13 +212,17 @@ const _pluginChromeHideSelectorsJs = '''
 ///   the browser's CSS viewport height equals [naturalHeight] even though the
 ///   physical WebView is only [playerHeight] px tall.  VLibras renders the
 ///   avatar in [naturalHeight] CSS px; the browser scales the result down to
-///   [playerHeight] physical px automatically.  No JS transform is needed.
+///   [playerHeight] physical px automatically.
+///
+/// Side crop / optical centering is done with CSS `transform: scale` on the
+/// plugin wrapper (platform-view safe — do not rely on Flutter OverflowBox).
 ///
 /// [playerHeight] — Flutter widget height in logical pixels.
-/// [naturalHeight] — virtual canvas height the VLibras Unity scene renders at.
-///   Lower values zoom in (avatar fills more of the widget, less black margin).
-///   Higher values zoom out (avatar appears smaller with more scene context).
-///   Typical useful range: 300 – 700.  Default: 500.
+/// [naturalHeight] — virtual canvas height the VLibras Unity scene renders at
+///   so the panel fills the WebView width (typically
+///   `height × 320 / frameWidth`).
+/// [contentZoom] — extra scale (>1 crops sides / zooms the avatar).
+/// [originX] / [originY] — transform-origin in 0..1 (0.5 = center).
 /// [playerWidth] — unused for scaling; kept for API compatibility.
 String buildVLibrasHtml({
   required String baseUrl,
@@ -193,6 +232,9 @@ String buildVLibrasHtml({
   double? playerWidth,
   double? playerHeight,
   double naturalHeight = 500.0,
+  double contentZoom = 1.0,
+  double originX = 0.5,
+  double originY = 0.5,
 }) {
   // initial-scale = widget_height / naturalHeight
   // window.innerHeight = physical_height / initial-scale = naturalHeight
@@ -201,13 +243,18 @@ String buildVLibrasHtml({
   final double _initScale =
       (playerHeight != null && playerHeight > 0) ? playerHeight / naturalHeight : 1.0;
   final String _initScaleStr = _initScale.toStringAsFixed(4);
+  final String _panelWidth = kVLibrasPanelCssWidth.toStringAsFixed(0);
+  final double _zoom = contentZoom < 1.0 ? 1.0 : contentZoom;
+  final String _zoomStr = _zoom.toStringAsFixed(4);
+  final String _originXStr = (originX.clamp(0.0, 1.0) * 100).toStringAsFixed(2);
+  final String _originYStr = (originY.clamp(0.0, 1.0) * 100).toStringAsFixed(2);
 
   return '''
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=320,initial-scale=$_initScaleStr,user-scalable=no"/>
+  <meta name="viewport" content="width=$_panelWidth,initial-scale=$_initScaleStr,user-scalable=no"/>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -215,6 +262,37 @@ String buildVLibrasHtml({
       height: 100%;
       background: white;
       overflow: hidden;
+    }
+
+    /* Fill the WebView and keep the plugin panel centered. */
+    [vw] {
+      position: relative !important;
+      width: 100% !important;
+      height: 100% !important;
+      overflow: hidden !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+    }
+    [vw-plugin-wrapper] {
+      position: absolute !important;
+      left: 50% !important;
+      top: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      margin: 0 !important;
+      overflow: hidden !important;
+      transform: translateX(-50%) scale($_zoomStr) !important;
+      transform-origin: ${_originXStr}% ${_originYStr}% !important;
+    }
+    [vw-plugin-wrapper] canvas,
+    [vw-plugin-wrapper] iframe,
+    [vw-plugin-wrapper] video {
+      display: block !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
     }
 
     /* Hide the circular access button — opened programmatically */
@@ -351,6 +429,23 @@ String buildVLibrasHtml({
               el.style.setProperty('opacity', '0', 'important');
             });
           });
+          // Re-apply framing — VLibras may overwrite wrapper styles on load.
+          var wrap = document.querySelector('[vw-plugin-wrapper]');
+          if (wrap) {
+            wrap.style.setProperty(
+              'transform',
+              'translateX(-50%) scale($_zoomStr)',
+              'important'
+            );
+            wrap.style.setProperty('left', '50%', 'important');
+            wrap.style.setProperty('top', '0', 'important');
+            wrap.style.setProperty(
+              'transform-origin',
+              '${_originXStr}% ${_originYStr}%',
+              'important'
+            );
+            wrap.style.setProperty('overflow', 'hidden', 'important');
+          }
         }
 
         if (document.readyState === 'complete' && typeof window.onload === 'function') {
