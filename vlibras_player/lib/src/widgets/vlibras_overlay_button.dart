@@ -32,6 +32,7 @@ class VLibrasOverlayButton extends StatefulWidget {
     this.margin = const EdgeInsets.only(bottom: 24, right: 16),
     this.primaryColor = const Color(0xFF1351B4),
     this.onSkip,
+    this.onError,
   });
 
   final VLibrasConfig config;
@@ -58,6 +59,9 @@ class VLibrasOverlayButton extends StatefulWidget {
   /// If null, the button still calls [VLibrasPlayerController.skip] internally.
   final VoidCallback? onSkip;
 
+  /// Called when VLibras fails to initialize or load.
+  final ValueChanged<String>? onError;
+
   @override
   State<VLibrasOverlayButton> createState() => _VLibrasOverlayButtonState();
 }
@@ -71,6 +75,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
 
   bool _isOpen = false;
   bool _isReady = false;
+  bool _errorReported = false;
   String? _subtitleText;
 
   @override
@@ -101,6 +106,20 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onWebResourceError: (error) {
+            if (_isReady || _errorReported) return;
+            final desc = error.description.trim();
+            final message = desc.isEmpty
+                ? 'Falha ao carregar o VLibras'
+                : 'Falha ao carregar o VLibras: $desc';
+            _ctrl.emitEvent(
+              VLibrasEvent(type: VLibrasEventType.error, message: message),
+            );
+          },
+        ),
+      )
       ..addJavaScriptChannel(
         'VLibrasChannel',
         onMessageReceived: (msg) {
@@ -127,10 +146,15 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
   void _handleEvent(VLibrasEvent event) {
     if (!mounted) return;
     if (event.type == VLibrasEventType.ready) {
+      if (_errorReported) return;
       setState(() => _isReady = true);
       if (widget.initialText != null) {
         _ctrl.translate(widget.initialText!);
       }
+    } else if (event.type == VLibrasEventType.error) {
+      if (_errorReported) return;
+      _errorReported = true;
+      widget.onError?.call(event.message ?? 'Erro desconhecido');
     }
   }
 

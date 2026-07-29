@@ -137,6 +137,7 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   // ValueNotifier avoids rebuilding the WebViewWidget when the state changes.
   final _state = ValueNotifier<_LoadState>(_LoadState.loading);
   String? _errorMessage;
+  bool _errorReported = false;
 
   /// Width of the Flutter WebView / visible frame.
   double get _frameWidth {
@@ -192,14 +193,42 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
     if (configChanged || layoutChanged) {
       _state.value = _LoadState.loading;
       _errorMessage = null;
+      _errorReported = false;
       _buildWebViewController(reload: true);
     }
+  }
+
+  void _reportError(String message) {
+    if (_errorReported) return;
+    _errorReported = true;
+    if (mounted) {
+      _errorMessage = message;
+      _state.value = _LoadState.error;
+    }
+    final event =
+        VLibrasEvent(type: VLibrasEventType.error, message: message);
+    widget.controller?.emitEvent(event);
+    widget.onError?.call(message);
   }
 
   void _buildWebViewController({bool reload = false}) {
     _webController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onWebResourceError: (error) {
+            // Ignore secondary resource noise after init succeeded/failed.
+            if (_state.value != _LoadState.loading || _errorReported) return;
+            final desc = error.description.trim();
+            _reportError(
+              desc.isEmpty
+                  ? 'Falha ao carregar o VLibras'
+                  : 'Falha ao carregar o VLibras: $desc',
+            );
+          },
+        ),
+      )
       ..addJavaScriptChannel(
         'VLibrasChannel',
         onMessageReceived: _onJsMessage,
@@ -228,24 +257,24 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
   void _onJsMessage(JavaScriptMessage message) {
     try {
       final event = _parseEvent(message.message);
-      widget.controller?.emitEvent(event);
 
       switch (event.type) {
         case VLibrasEventType.ready:
+          if (_errorReported) return;
+          widget.controller?.emitEvent(event);
           if (mounted) _state.value = _LoadState.ready;
           widget.onReady?.call();
         case VLibrasEventType.translateComplete:
+          widget.controller?.emitEvent(event);
           widget.onTranslateComplete?.call();
         case VLibrasEventType.error:
-          if (mounted) {
-            _errorMessage = event.message ?? 'Erro desconhecido';
-            _state.value = _LoadState.error;
-          }
-          widget.onError?.call(event.message ?? 'Erro desconhecido');
+          _reportError(event.message ?? 'Erro desconhecido');
         default:
           break;
       }
-    } catch (_) {}
+    } catch (_) {
+      _reportError('Erro ao processar evento do VLibras');
+    }
   }
 
   VLibrasEvent _parseEvent(String json) {

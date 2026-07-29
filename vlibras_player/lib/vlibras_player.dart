@@ -15,3 +15,4 @@ export 'src/vlibras_player_api.dart';
 export 'src/vlibras_widget_controller.dart';
 export 'src/widgets/vlibras_overlay_button.dart';
 export 'src/widgets/vlibras_player_widget.dart';
+export 'src/widgets/vlibras_responsive_player.dart';

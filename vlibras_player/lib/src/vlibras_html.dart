@@ -96,7 +96,7 @@ String buildVLibrasInitScript() {
     if (attempts > 240) {
       clearInterval(poll);
       console.log('[VLibras] timeout');
-      VLibrasChannel.postMessage(JSON.stringify({type:'ready'}));
+      VLibrasChannel.postMessage(JSON.stringify({type:'error', message:'Falha ao inicializar o VLibras'}));
     }
   }, 250);
 })();
@@ -498,7 +498,10 @@ String buildVLibrasHtml({
           if (attempts > 240) {
             clearInterval(poll);
             console.log('[VLibras] timeout');
-            VLibrasChannel.postMessage(JSON.stringify({ type: 'ready' }));
+            VLibrasChannel.postMessage(JSON.stringify({
+              type: 'error',
+              message: 'Falha ao inicializar o VLibras'
+            }));
           }
         }, 250);
 

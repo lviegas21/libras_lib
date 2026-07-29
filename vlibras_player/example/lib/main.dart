@@ -121,14 +121,15 @@ class _InlinePlayerPageState extends State<_InlinePlayerPage> {
       appBar: AppBar(title: const Text('Player Inline')),
       body: Column(
         children: [
-          Padding(
+            Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Center(
-              child: VLibrasPlayerWidget(
+            child: SizedBox(
+              height: 220,
+              child: VLibrasResponsivePlayer(
                 config: const VLibrasConfig(avatar: VLibrasAvatar.icaro),
                 controller: _playerController,
-                height: 220,
-                avatarViewportHeight: 280,
+                maxWidth: 170,
+                maxHeight: 220,
                 onReady: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -207,6 +208,11 @@ class _OverlayPage extends StatelessWidget {
           VLibrasOverlayButton(
             config: const VLibrasConfig(avatar: VLibrasAvatar.hosana),
             initialText: 'Bem-vindo ao leitor de Libras',
+            onError: (msg) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Erro VLibras: $msg')),
+              );
+            },
           ),
         ],
       ),
@@ -377,19 +383,25 @@ class _KeyboardWithPlayerPageState extends State<_KeyboardWithPlayerPage> {
                 ),
               ),
             ),
-            // WebView fills the frame exactly — component width = avatar width.
+            // Responsive centered frame — width matches avatar stage.
             SizedBox(
               height: frameHeight,
               width: frameWidth,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  VLibrasPlayerWidget.avatarOnly(
+                  VLibrasResponsivePlayer(
                     config: VLibrasConfig(avatar: _avatar),
                     controller: _playerController,
-                    height: frameHeight,
-                    visibleWidth: frameWidth,
+                    maxWidth: frameWidth,
+                    maxHeight: frameHeight,
                     onReady: () => setState(() => _isReady = true),
+                    onError: (msg) {
+                      setState(() => _isReady = true);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Erro VLibras: $msg')),
+                      );
+                    },
                   ),
                   if (!_isReady)
                     const ColoredBox(

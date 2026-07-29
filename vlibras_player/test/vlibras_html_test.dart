@@ -87,5 +87,22 @@ void main() {
       expect(html, contains('[vw-plugin-wrapper] button'));
       expect(html, contains("'[vw-plugin-wrapper] footer',"));
     });
+
+    test('init timeout reports error instead of ready', () {
+      final html = buildVLibrasHtml(
+        baseUrl: 'https://vlibras.gov.br/app',
+        avatar: 'guga',
+        speed: 1.0,
+        autoPlay: false,
+      );
+
+      expect(html, contains("message: 'Falha ao inicializar o VLibras'"));
+      expect(html, contains("type: 'error'"));
+      // Must not fake success on timeout.
+      expect(
+        html.contains("console.log('[VLibras] timeout');\n            VLibrasChannel.postMessage(JSON.stringify({ type: 'ready' }))"),
+        isFalse,
+      );
+    });
   });
 }
