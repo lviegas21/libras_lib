@@ -2,6 +2,8 @@ package br.gov.vlibras.vlibras_player
 
 import android.content.Context
 import android.webkit.JavascriptInterface
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -89,9 +91,48 @@ class VLibrasPlayerPlugin : FlutterPlugin, MethodCallHandler {
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             cacheMode = WebSettings.LOAD_DEFAULT
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            // NEVER_ALLOW (não ALWAYS_ALLOW): a página é servida via HTTPS
+            // (vlibras.gov.br); não há motivo para permitir sub-recursos HTTP
+            // misturados, e ALWAYS_ALLOW é uma superfície de risco desnecessária.
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         }
-        wv.webChromeClient = WebChromeClient()
+        // WebChromeClient customizado: a classe padrão (sem overrides) mostra
+        // diálogos NATIVOS do Android para window.alert()/confirm()/prompt() —
+        // texto de JS cru, por cima de todo o app, bloqueando a thread principal
+        // até o usuário tocar OK. Este WebView é headless/embutido: nenhum
+        // diálogo de JS deve escapar para a UI do sistema.
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onJsAlert(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                result: JsResult?,
+            ): Boolean {
+                result?.confirm()
+                return true
+            }
+
+            override fun onJsConfirm(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                result: JsResult?,
+            ): Boolean {
+                result?.confirm()
+                return true
+            }
+
+            override fun onJsPrompt(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                defaultValue: String?,
+                result: JsPromptResult?,
+            ): Boolean {
+                result?.cancel()
+                return true
+            }
+        }
         wv.addJavascriptInterface(
             VLibrasJsInterface(
                 onReady           = { emitEvent("ready") },

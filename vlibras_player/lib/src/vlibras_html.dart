@@ -1,110 +1,3 @@
-/// Returns a JavaScript snippet injected into the live VLibras page after load.
-///
-/// This is used when the WebView navigates directly to `baseUrl/app` instead
-/// of loading a custom HTML string.  The script:
-/// - Strips CORS-problematic request headers (same as the HTML version)
-/// - Injects CSS overrides (hide the access button chrome)
-/// - Registers [window.__vlibrasTranslate] for Dart to call
-/// - Polls until the VLibras player element appears, then signals ready
-String buildVLibrasInitScript() {
-  return r'''
-(function() {
-  // ── CORS header interceptor ──────────────────────────────────────────────
-  var _blocked = /^(if-none-match|if-modified-since|cache-control|pragma)$/i;
-  var _origSRH = XMLHttpRequest.prototype.setRequestHeader;
-  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
-    if (_blocked.test(name)) return;
-    return _origSRH.call(this, name, value);
-  };
-  var _origFetch = window.fetch;
-  if (_origFetch) {
-    window.fetch = function(url, init) {
-      if (init && init.headers) {
-        var h = init.headers;
-        var keys = ['if-none-match','If-None-Match','if-modified-since','If-Modified-Since',
-                    'cache-control','Cache-Control','pragma','Pragma'];
-        if (h instanceof Headers) keys.forEach(function(k){h.delete(k);});
-        else if (h && typeof h==='object') keys.forEach(function(k){delete h[k];});
-      }
-      return _origFetch.call(this, url, init);
-    };
-  }
-
-  // ── CSS overrides ────────────────────────────────────────────────────────
-  var s = document.createElement('style');
-  s.textContent =
-    '* { margin:0; padding:0; box-sizing:border-box; }' +
-    'html,body { width:100%; height:100%; background:black; overflow:hidden; }' +
-    '[vw-access-button] { opacity:0 !important; pointer-events:none !important; }';
-  document.head.appendChild(s);
-
-  // ── Translate API ────────────────────────────────────────────────────────
-  window.__vlibrasTranslate = function(text) {
-    try {
-      var p = window.plugin;
-      if (p && p.player && typeof p.player.translate === 'function') {
-        console.log('[VLibras] translate via window.plugin.player.translate');
-        p.player.translate(text);
-        VLibrasChannel.postMessage(JSON.stringify({type:'translateComplete'}));
-        return;
-      }
-      console.log('[VLibras] plugin not ready — plugin=' + !!window.plugin +
-        ' player=' + !!(p && p.player) +
-        ' loaded=' + !!(p && p.player && p.player.loaded));
-      VLibrasChannel.postMessage(JSON.stringify({type:'error', message:'plugin not ready'}));
-    } catch(e) {
-      console.log('[VLibras] translate error: ' + e.message);
-      VLibrasChannel.postMessage(JSON.stringify({type:'error', message:e.message}));
-    }
-  };
-
-  // ── Poll: wait for window.plugin.player.loaded ───────────────────────────
-  var clicked  = false;
-  var attempts = 0;
-  var poll = setInterval(function() {
-    attempts++;
-
-    // Open the panel once (single click — it is a toggle)
-    if (!clicked) {
-      var btn = document.querySelector('[vw-access-button]');
-      if (btn && btn.children.length > 0) {
-        clicked = true;
-        btn.click();
-        console.log('[VLibras] btn.click() — opening panel');
-      }
-    }
-
-    var p = window.plugin;
-    if (p && p.player && p.player.loaded) {
-      clearInterval(poll);
-      console.log('[VLibras] plugin.player ready after ' + attempts + ' polls');
-      setTimeout(function() {
-        VLibrasChannel.postMessage(JSON.stringify({type:'ready'}));
-      }, 500);
-      return;
-    }
-
-    if (attempts % 20 === 0) {
-      console.log('[VLibras] poll #' + attempts +
-        ' clicked=' + clicked +
-        ' plugin=' + !!window.plugin +
-        ' player=' + !!(p && p.player) +
-        ' loaded=' + !!(p && p.player && p.player.loaded) +
-        ' canvases=' + document.querySelectorAll('canvas').length);
-    }
-
-    if (attempts > 240) {
-      clearInterval(poll);
-      console.log('[VLibras] timeout');
-      VLibrasChannel.postMessage(JSON.stringify({type:'error', message:'Falha ao inicializar o VLibras'}));
-    }
-  }, 250);
-})();
-''';
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 /// CSS selectors that hide VLibras native chrome when Flutter owns the panel UI.
 const _pluginChromeHideSelectors = '''
     .vw-plugin-top-wrapper,
@@ -448,6 +341,38 @@ String buildVLibrasHtml({
           }
         }
 
+        // Apply once immediately, then keep it applied reactively via a
+        // MutationObserver instead of unconditionally re-running the
+        // querySelectorAll sweep on every 250ms poll tick. Running that sweep
+        // every tick — regardless of whether the DOM actually changed — used
+        // to compete with Unity's synchronous boot burst for the same JS
+        // thread, which was enough on low-end devices to trip the WebView's
+        // "page unresponsive" watchdog. The observer only reacts when nodes
+        // are actually inserted, and requestIdleCallback (with a setTimeout
+        // fallback) defers the work instead of running it inline on the
+        // mutation callback, so it never competes directly with Unity's boot.
+        suppressPluginUi();
+
+        var _suppressScheduled = false;
+        function _scheduleSuppressPluginUi() {
+          if (_suppressScheduled) return;
+          _suppressScheduled = true;
+          var run = function() {
+            _suppressScheduled = false;
+            suppressPluginUi();
+          };
+          if (window.requestIdleCallback) {
+            window.requestIdleCallback(run, { timeout: 500 });
+          } else {
+            setTimeout(run, 0);
+          }
+        }
+
+        var chromeObserver = new MutationObserver(function() {
+          _scheduleSuppressPluginUi();
+        });
+        chromeObserver.observe(document.body, { childList: true, subtree: true });
+
         if (document.readyState === 'complete' && typeof window.onload === 'function') {
           window.onload();
         }
@@ -457,7 +382,6 @@ String buildVLibrasHtml({
 
         var poll = setInterval(function() {
           attempts++;
-          suppressPluginUi();
 
           // Click the access button ONCE to open the panel and trigger
           // window.plugin = new VLibras.Plugin({...}).
@@ -479,6 +403,7 @@ String buildVLibrasHtml({
           var p = window.plugin;
           if (p && p.player && p.player.loaded) {
             clearInterval(poll);
+            chromeObserver.disconnect();
             console.log('[VLibras] plugin.player ready after ' + attempts + ' polls');
             setTimeout(function() {
               VLibrasChannel.postMessage(JSON.stringify({ type: 'ready' }));
@@ -497,6 +422,7 @@ String buildVLibrasHtml({
 
           if (attempts > 240) {
             clearInterval(poll);
+            chromeObserver.disconnect();
             console.log('[VLibras] timeout');
             VLibrasChannel.postMessage(JSON.stringify({
               type: 'error',

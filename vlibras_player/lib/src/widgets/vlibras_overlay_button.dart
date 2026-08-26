@@ -110,6 +110,9 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
         NavigationDelegate(
           onWebResourceError: (error) {
             if (_isReady || _errorReported) return;
+            // Sub-recursos (fonte, ícone, chunk do WASM) não são fatais —
+            // só erros do documento principal interrompem o carregamento.
+            if (error.isForMainFrame == false) return;
             final desc = error.description.trim();
             final message = desc.isEmpty
                 ? 'Falha ao carregar o VLibras'

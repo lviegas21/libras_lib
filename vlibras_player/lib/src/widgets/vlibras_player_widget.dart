@@ -220,6 +220,12 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           onWebResourceError: (error) {
             // Ignore secondary resource noise after init succeeded/failed.
             if (_state.value != _LoadState.loading || _errorReported) return;
+            // Falha num sub-recurso (fonte, ícone, um chunk do WASM) não
+            // significa que a página principal falhou — só erros do
+            // documento principal são tratados como fatais aqui. `null`
+            // (plataforma não informa) é tratado como potencialmente fatal,
+            // por segurança.
+            if (error.isForMainFrame == false) return;
             final desc = error.description.trim();
             _reportError(
               desc.isEmpty
