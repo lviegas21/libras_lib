@@ -177,6 +177,26 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
     super.dispose();
   }
 
+  /// Tolerância para comparação de dimensões — evita reload por ruído de
+  /// ponto flutuante entre builds (ex.: MediaQuery recalculado com diferença
+  /// de fração de pixel) que não representa uma mudança de layout real.
+  ///
+  /// Não elimina o reload em mudanças de tamanho genuínas (rotação, resize
+  /// de multi-window): isso exigiria reescalar o canvas do Unity depois que
+  /// ele já inicializou, o que só é possível via viewport meta + `initial-
+  /// scale`, aplicado uma única vez no carregamento da página — o próprio
+  /// Unity não reage a mudanças de viewport após o boot. Não há hook oficial
+  /// do VLibras para re-configurar isso ao vivo, então travar a orientação
+  /// no app (ver `SystemChrome.setPreferredOrientations` / manifest/plist)
+  /// é a mitigação real para o gatilho mais comum; este guard cobre apenas
+  /// o ruído espúrio.
+  static const _dimensionEpsilon = 0.5;
+
+  bool _dimensionChanged(double? a, double? b) {
+    if (a == null || b == null) return a != b;
+    return (a - b).abs() > _dimensionEpsilon;
+  }
+
   @override
   void didUpdateWidget(covariant VLibrasPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -184,10 +204,14 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
         oldWidget.config.speed != widget.config.speed ||
         oldWidget.config.autoPlay != widget.config.autoPlay ||
         oldWidget.config.baseUrl != widget.config.baseUrl;
-    final layoutChanged = oldWidget.height != widget.height ||
-        oldWidget.width != widget.width ||
-        oldWidget.visibleWidth != widget.visibleWidth ||
-        oldWidget.avatarViewportHeight != widget.avatarViewportHeight ||
+    final layoutChanged =
+        _dimensionChanged(oldWidget.height, widget.height) ||
+        _dimensionChanged(oldWidget.width, widget.width) ||
+        _dimensionChanged(oldWidget.visibleWidth, widget.visibleWidth) ||
+        _dimensionChanged(
+          oldWidget.avatarViewportHeight,
+          widget.avatarViewportHeight,
+        ) ||
         oldWidget.contentAlignment != widget.contentAlignment;
 
     if (configChanged || layoutChanged) {
