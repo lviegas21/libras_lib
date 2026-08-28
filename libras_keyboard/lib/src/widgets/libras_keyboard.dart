@@ -52,6 +52,15 @@ const _actionLetters = [
   LibrasLetter.clear,
 ];
 
+/// Cap (in physical px) used to size the decode of the bundled hand-sign
+/// PNGs (source images are 1536x1024). Key tiles never render anywhere near
+/// that size — without this, every visible key decodes a full ~6MB bitmap,
+/// and since the whole alphabet is on screen at once (no virtualization),
+/// opening the keyboard can spike memory by 100MB+ on low-end devices.
+/// Only cacheWidth is set so Flutter derives the height preserving the
+/// source aspect ratio (no distortion).
+const _letterDecodeCacheWidth = 300;
+
 /// Default builder that renders bundled PNG hand-sign assets.
 ///
 /// The image fills the entire key tile area.
@@ -67,6 +76,7 @@ Widget defaultLetterBuilder(String letter, bool isPressed) {
       width: double.infinity,
       height: double.infinity,
       fit: BoxFit.cover,
+      cacheWidth: _letterDecodeCacheWidth,
       errorBuilder: (_, __, ___) => _LetterFallback(letter: letter),
     ),
   );

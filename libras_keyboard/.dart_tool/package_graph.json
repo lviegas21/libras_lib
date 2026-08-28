@@ -65,7 +65,7 @@
     },
     {
       "name": "meta",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "dependencies": []
     },
     {
@@ -127,7 +127,7 @@
     },
     {
       "name": "test_api",
-      "version": "0.7.6",
+      "version": "0.7.7",
       "dependencies": [
         "async",
         "boolean_selector",
@@ -159,7 +159,7 @@
     },
     {
       "name": "async",
-      "version": "2.13.1",
+      "version": "2.12.0",
       "dependencies": [
         "collection",
         "meta"
@@ -172,17 +172,6 @@
         "leak_tracker",
         "matcher",
         "meta"
-      ]
-    },
-    {
-      "name": "leak_tracker",
-      "version": "11.0.2",
-      "dependencies": [
-        "clock",
-        "collection",
-        "meta",
-        "path",
-        "vm_service"
       ]
     },
     {
@@ -199,7 +188,7 @@
     },
     {
       "name": "source_span",
-      "version": "1.10.2",
+      "version": "1.10.1",
       "dependencies": [
         "collection",
         "path",
@@ -215,8 +204,19 @@
       ]
     },
     {
+      "name": "leak_tracker",
+      "version": "11.0.2",
+      "dependencies": [
+        "clock",
+        "collection",
+        "meta",
+        "path",
+        "vm_service"
+      ]
+    },
+    {
       "name": "vm_service",
-      "version": "15.2.0",
+      "version": "14.3.1",
       "dependencies": []
     }
   ],
