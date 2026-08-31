@@ -128,6 +128,8 @@ String buildVLibrasHtml({
   double contentZoom = 1.0,
   double originX = 0.5,
   double originY = 0.5,
+  int sdkLoadRetries = 4,
+  int initTimeoutMs = 90000,
 }) {
   // initial-scale = widget_height / naturalHeight
   // window.innerHeight = physical_height / initial-scale = naturalHeight
@@ -215,6 +217,39 @@ String buildVLibrasHtml({
   </div>
 
   <script>
+    // Rede de captura global de JS: erros e promises rejeitadas que antes
+    // morriam no console do WebView agora sobem pro Dart (canal VLibrasChannel)
+    // -> VLibrasPlayer.errorReporter -> Crashlytics. "kind" separa a origem.
+    (function() {
+      function post(payload) {
+        try { VLibrasChannel.postMessage(JSON.stringify(payload)); } catch (e) {}
+      }
+      window.addEventListener('error', function(e) {
+        post({
+          type: 'error',
+          message: (e && e.message) || 'Erro JS desconhecido',
+          data: {
+            kind: 'js-error',
+            source: e && e.filename,
+            lineno: e && e.lineno,
+            colno: e && e.colno,
+            stack: e && e.error && e.error.stack ? String(e.error.stack).slice(0, 800) : null
+          }
+        });
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var r = e && e.reason;
+        post({
+          type: 'error',
+          message: (r && (r.message || r)) ? String(r.message || r) : 'Promise rejeitada sem motivo',
+          data: {
+            kind: 'unhandled-rejection',
+            stack: r && r.stack ? String(r.stack).slice(0, 800) : null
+          }
+        });
+      });
+    })();
+
     window.__vlibrasConfig = {
       avatar: '$avatar',
       speed: $speed,
@@ -235,10 +270,25 @@ String buildVLibrasHtml({
     (function() {
       var _blocked = /^(if-none-match|if-modified-since|cache-control|pragma)\$/i;
 
+      // Marca de "houve tráfego de rede agora" — o poll de init usa isso para
+      // NÃO declarar timeout enquanto o Unity/WASM ainda está baixando numa
+      // conexão lenta (progresso de download não muda o DOM).
+      window.__vlibrasNetTick = 0;
+      function _tick() { window.__vlibrasNetTick = Date.now(); }
+
       var _origSRH = XMLHttpRequest.prototype.setRequestHeader;
       XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
         if (_blocked.test(name)) return;
         return _origSRH.call(this, name, value);
+      };
+      var _origSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function() {
+        try {
+          _tick();
+          this.addEventListener('progress', _tick);
+          this.addEventListener('loadend', _tick);
+        } catch (e) {}
+        return _origSend.apply(this, arguments);
       };
 
       var _origFetch = window.fetch;
@@ -256,7 +306,11 @@ String buildVLibrasHtml({
               keys.forEach(function(k) { delete h[k]; });
             }
           }
-          return _origFetch.call(this, url, init);
+          _tick();
+          return _origFetch.call(this, url, init).then(function(r) {
+            _tick();
+            return r;
+          });
         };
       }
     })();
@@ -294,14 +348,104 @@ String buildVLibrasHtml({
     };
   </script>
 
-  <script
-    src="$baseUrl/vlibras-plugin.js"
-    onerror="VLibrasChannel.postMessage(JSON.stringify({type:'error',message:'Falha ao carregar vlibras-plugin.js'}))">
-  </script>
-
   <script>
+    /*
+     * Carregador resiliente do VLibras para redes móveis instáveis (uso em
+     * campo). Diferenças em relação ao antigo `<script src onerror>`:
+     *
+     *  - re-tenta baixar `vlibras-plugin.js` com backoff exponencial
+     *    (1s, 2s, 4s, 8s...), até `sdkLoadRetries` vezes, em vez de falhar
+     *    no primeiro soluço de conexão;
+     *  - quando o device está offline, PAUSA (não conta como tentativa) e
+     *    espera o evento `online` para retomar na hora;
+     *  - o timeout do boot do avatar só corre enquanto há conexão E nenhum
+     *    progresso visível — download lento ou queda intermitente não
+     *    "gastam" o orçamento;
+     *  - emite eventos `loading` (phase/attempt/next_ms) para o app mostrar
+     *    "reconectando…" em vez de spinner cego ou erro prematuro.
+     */
     (function() {
-      try {
+      var SDK_URL       = '$baseUrl/vlibras-plugin.js';
+      var MAX_RETRIES   = $sdkLoadRetries;
+      var POLL_MS       = 250;
+      var BOOT_BUDGET_MS = $initTimeoutMs;
+
+      var scriptAttempt = 0;
+      var widgetStarted = false;
+
+      function post(o) {
+        try { VLibrasChannel.postMessage(JSON.stringify(o)); } catch (e) {}
+      }
+      function loading(phase, extra) {
+        var d = { phase: phase };
+        if (extra) for (var k in extra) d[k] = extra[k];
+        post({ type: 'loading', message: phase, data: d });
+      }
+      function isOffline() { return navigator && navigator.onLine === false; }
+      function onceOnline(cb) {
+        function h() { window.removeEventListener('online', h); cb(); }
+        window.addEventListener('online', h);
+      }
+
+      function loadSdk() {
+        if (widgetStarted) return;
+        if (isOffline()) {
+          loading('waiting-network', { attempt: scriptAttempt });
+          onceOnline(loadSdk);
+          return;
+        }
+        scriptAttempt++;
+        loading('loading-sdk', { attempt: scriptAttempt });
+
+        var s = document.createElement('script');
+        // Cache-bust a partir da 2a tentativa: cobre o caso de um 0-byte /
+        // resposta truncada ter sido cacheada pela WebView.
+        s.src = SDK_URL + (scriptAttempt > 1 ? ('?r=' + Date.now()) : '');
+        s.async = true;
+        s.onload = function() { startWidget(s); };
+        s.onerror = function() {
+          try { s.remove(); } catch (e) {}
+          if (scriptAttempt <= MAX_RETRIES) {
+            var delay = Math.min(1000 * Math.pow(2, scriptAttempt - 1), 8000);
+            loading('retrying-sdk', { attempt: scriptAttempt, next_ms: delay });
+            setTimeout(loadSdk, delay);
+          } else {
+            post({
+              type: 'error',
+              message: 'Não foi possível carregar o VLibras. Verifique sua conexão e tente de novo.',
+              data: { kind: 'sdk-load', attempts: scriptAttempt }
+            });
+          }
+        };
+        document.head.appendChild(s);
+      }
+
+      // Se esgotou as tentativas e a conexão volta depois, tenta de novo.
+      window.addEventListener('online', function() {
+        if (!widgetStarted && scriptAttempt > MAX_RETRIES) {
+          scriptAttempt = 0;
+          loadSdk();
+        }
+      });
+
+      function startWidget(scriptEl) {
+        if (widgetStarted) return;
+        if (!window.VLibras || !window.VLibras.Widget) {
+          // "load" disparou mas o corpo do script não veio inteiro — trata
+          // como falha de rede e re-tenta.
+          if (scriptEl && scriptEl.onerror) { scriptEl.onerror(); }
+          return;
+        }
+        widgetStarted = true;
+        loading('initializing-avatar');
+        try {
+          runVLibras();
+        } catch (e) {
+          post({ type: 'error', message: e.message, data: { kind: 'widget-init' } });
+        }
+      }
+
+      function runVLibras() {
         // Initialise the VLibras Widget.  The Widget constructor sets window.onload
         // to register its internal click handler.  If the page's load event has
         // already fired (common with loadHtmlString in WebView), call it manually.
@@ -377,11 +521,24 @@ String buildVLibrasHtml({
           window.onload();
         }
 
-        var clicked  = false;
-        var attempts = 0;
+        var clicked   = false;
+        var attempts  = 0;
+        var stalledMs = 0;         // tempo sem progresso E online
+        var lastSig   = '';        // "assinatura" de progresso do boot
+        var netWaitAnnounced = false;
 
         var poll = setInterval(function() {
           attempts++;
+
+          // Offline: não conta contra o orçamento — avisa uma vez e espera.
+          if (isOffline()) {
+            if (!netWaitAnnounced) {
+              netWaitAnnounced = true;
+              loading('waiting-network', { attempt: attempts });
+            }
+            return;
+          }
+          netWaitAnnounced = false;
 
           // Click the access button ONCE to open the panel and trigger
           // window.plugin = new VLibras.Plugin({...}).
@@ -411,29 +568,44 @@ String buildVLibrasHtml({
             return;
           }
 
-          if (attempts % 20 === 0) {
-            console.log('[VLibras] poll #' + attempts +
-              ' clicked=' + clicked +
-              ' plugin=' + !!window.plugin +
-              ' player=' + !!(p && p.player) +
-              ' loaded=' + !!(p && p.player && p.player.loaded) +
-              ' canvases=' + document.querySelectorAll('canvas').length);
+          // Progresso do boot: mudança no DOM/plugin OU tráfego de rede
+          // recente (download de WASM numa conexão lenta) zera o contador de
+          // "travado" — o orçamento de timeout só corre quando está de fato
+          // parado.
+          var sig = '' + clicked +
+            '|' + !!window.plugin +
+            '|' + !!(p && p.player) +
+            '|' + document.querySelectorAll('canvas').length;
+          var netRecent =
+            (Date.now() - (window.__vlibrasNetTick || 0)) < 8000;
+          if (sig !== lastSig || netRecent) {
+            lastSig = sig;
+            stalledMs = 0;
+          } else {
+            stalledMs += POLL_MS;
           }
 
-          if (attempts > 240) {
+          if (attempts % 20 === 0) {
+            console.log('[VLibras] poll #' + attempts + ' sig=' + sig +
+              ' stalledMs=' + stalledMs);
+          }
+
+          // Só falha quando ficou REALMENTE travado (online, sem progresso
+          // nenhum) por mais que o orçamento — não por lentidão de download.
+          if (stalledMs > BOOT_BUDGET_MS) {
             clearInterval(poll);
             chromeObserver.disconnect();
-            console.log('[VLibras] timeout');
+            console.log('[VLibras] timeout (stalled ' + stalledMs + 'ms)');
             VLibrasChannel.postMessage(JSON.stringify({
               type: 'error',
-              message: 'Falha ao inicializar o VLibras'
+              message: 'O VLibras demorou demais para iniciar. Tente novamente.',
+              data: { kind: 'init-timeout', stalled_ms: stalledMs }
             }));
           }
-        }, 250);
-
-      } catch(e) {
-        VLibrasChannel.postMessage(JSON.stringify({ type: 'error', message: e.message }));
+        }, POLL_MS);
       }
+
+      loadSdk();
     })();
   </script>
 </body>

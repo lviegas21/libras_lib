@@ -3,6 +3,13 @@ enum VLibrasEventType {
   /// Native WebView and VLibras script finished loading.
   ready,
 
+  /// Progress update while the player is still starting up. Not an error —
+  /// the phase is in [VLibrasEvent.data] under `phase` (e.g. `loading-sdk`,
+  /// `retrying-sdk`, `waiting-network`, `initializing-avatar`) plus optional
+  /// `attempt` / `next_ms`. Lets the host show "reconectando…" instead of a
+  /// blank spinner or a premature failure.
+  loading,
+
   /// The avatar finished signing the last submitted text.
   translateComplete,
 
@@ -37,6 +44,7 @@ class VLibrasEvent {
     final typeStr = map['type'] as String? ?? 'error';
     final type = switch (typeStr) {
       'ready' => VLibrasEventType.ready,
+      'loading' || 'status' => VLibrasEventType.loading,
       'translateComplete' => VLibrasEventType.translateComplete,
       'shown' => VLibrasEventType.shown,
       'hidden' => VLibrasEventType.hidden,

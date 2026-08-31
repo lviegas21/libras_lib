@@ -1,3 +1,4 @@
+import 'libras_error_reporter.dart';
 import 'models/vlibras_config.dart';
 import 'models/vlibras_event.dart';
 import 'vlibras_platform_interface.dart';
@@ -17,6 +18,27 @@ class VLibrasPlayer {
   VLibrasPlayer._();
 
   static VLibrasPlatformInterface get _impl => VLibrasPlatformInterface.instance;
+
+  /// Sink global de erros do VLibras. O app hospedeiro liga aqui o seu
+  /// mecanismo de observabilidade (ex.: Crashlytics) para receber **todas**
+  /// as falhas — inclusive as tratadas internamente pelos widgets/canais.
+  ///
+  /// Default: [debugPrintLibrasError] (só console em debug).
+  static LibrasErrorReporter errorReporter = debugPrintLibrasError;
+
+  /// Encaminha um erro ao [errorReporter] sem nunca lançar de volta.
+  static void reportError(
+    Object error,
+    StackTrace? stack, {
+    String? reason,
+    Map<String, Object?>? context,
+  }) {
+    try {
+      errorReporter(error, stack, reason: reason, context: context);
+    } catch (_) {
+      // observabilidade nunca pode quebrar o fluxo
+    }
+  }
 
   /// Initialises the native VLibras runtime with the given [config].
   ///

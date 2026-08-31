@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../models/vlibras_config.dart';
 import '../models/vlibras_event.dart';
 import '../vlibras_html.dart';
+import '../vlibras_player_api.dart';
 import '../vlibras_widget_controller.dart';
 
 /// A floating accessibility button that opens/closes the VLibras player panel.
@@ -139,6 +142,8 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
           playerWidth: widget.panelWidth,
           playerHeight: widget.panelHeight,
           naturalHeight: _avatarViewportHeight,
+          sdkLoadRetries: widget.config.sdkLoadRetries,
+          initTimeoutMs: widget.config.initTimeout.inMilliseconds,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -157,11 +162,29 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     } else if (event.type == VLibrasEventType.error) {
       if (_errorReported) return;
       _errorReported = true;
-      widget.onError?.call(event.message ?? 'Erro desconhecido');
+      final message = event.message ?? 'Erro desconhecido';
+      widget.onError?.call(message);
+      VLibrasPlayer.reportError(
+        message,
+        null,
+        reason: 'overlay-button',
+        context: {
+          'avatar': widget.config.avatar.apiId,
+          if (event.data != null) ...event.data!,
+        },
+      );
     }
   }
 
   VLibrasEvent _parseEvent(String json) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map) {
+        return VLibrasEvent.fromMap(Map<String, dynamic>.from(decoded));
+      }
+    } catch (_) {
+      // cai no parse tolerante abaixo
+    }
     if (json.contains('"ready"')) {
       return const VLibrasEvent(type: VLibrasEventType.ready);
     } else if (json.contains('"translateComplete"')) {

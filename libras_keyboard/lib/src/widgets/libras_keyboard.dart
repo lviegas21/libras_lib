@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controller/libras_keyboard_controller.dart';
+import '../libras_keyboard_diagnostics.dart';
 import '../models/libras_letter.dart';
 import 'libras_key.dart';
 
@@ -77,7 +78,16 @@ Widget defaultLetterBuilder(String letter, bool isPressed) {
       height: double.infinity,
       fit: BoxFit.cover,
       cacheWidth: _letterDecodeCacheWidth,
-      errorBuilder: (_, __, ___) => _LetterFallback(letter: letter),
+      errorBuilder: (_, error, stack) {
+        LibrasKeyboardDiagnostics.reportOnce(
+          'asset:$letter',
+          error,
+          stack,
+          reason: 'letter-asset-missing',
+          context: {'letter': letter},
+        );
+        return _LetterFallback(letter: letter);
+      },
     ),
   );
 }

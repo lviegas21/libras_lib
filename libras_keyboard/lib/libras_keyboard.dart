@@ -1,6 +1,8 @@
 library libras_keyboard;
 
 export 'src/controller/libras_keyboard_controller.dart';
+export 'src/libras_keyboard_diagnostics.dart'
+    show LibrasKeyboardDiagnostics, LibrasKeyboardErrorReporter;
 export 'src/models/libras_letter.dart';
 export 'src/widgets/libras_key.dart';
 export 'src/widgets/libras_keyboard.dart';

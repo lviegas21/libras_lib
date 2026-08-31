@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../models/vlibras_config.dart';
 import '../models/vlibras_event.dart';
 import '../vlibras_html.dart';
+import '../vlibras_player_api.dart';
 import '../vlibras_widget_controller.dart';
 
 /// An inline widget that embeds the VLibras avatar player.
@@ -222,7 +225,12 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
     }
   }
 
-  void _reportError(String message) {
+  void _reportError(
+    String message, {
+    Object? cause,
+    StackTrace? stack,
+    Map<String, dynamic>? data,
+  }) {
     if (_errorReported) return;
     _errorReported = true;
     if (mounted) {
@@ -233,6 +241,16 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
         VLibrasEvent(type: VLibrasEventType.error, message: message);
     widget.controller?.emitEvent(event);
     widget.onError?.call(message);
+    VLibrasPlayer.reportError(
+      cause ?? message,
+      stack,
+      reason: 'player-widget',
+      context: {
+        'avatar': widget.config.avatar.apiId,
+        'message': message,
+        ...?data,
+      },
+    );
   }
 
   void _buildWebViewController({bool reload = false}) {
@@ -276,6 +294,8 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           contentZoom: _contentZoom,
           originX: _originX,
           originY: _originY,
+          sdkLoadRetries: widget.config.sdkLoadRetries,
+          initTimeoutMs: widget.config.initTimeout.inMilliseconds,
         ),
         baseUrl: widget.config.baseUrl,
       );
@@ -294,20 +314,37 @@ class _VLibrasPlayerWidgetState extends State<VLibrasPlayerWidget> {
           widget.controller?.emitEvent(event);
           if (mounted) _state.value = _LoadState.ready;
           widget.onReady?.call();
+        case VLibrasEventType.loading:
+          // Progresso de inicialização (loading-sdk / retrying-sdk /
+          // waiting-network / initializing-avatar). Não é erro — mantém o
+          // estado de carregando e repassa para quem quiser mostrar o texto.
+          if (_errorReported) return;
+          widget.controller?.emitEvent(event);
+          if (mounted && _state.value != _LoadState.ready) {
+            _state.value = _LoadState.loading;
+          }
         case VLibrasEventType.translateComplete:
           widget.controller?.emitEvent(event);
           widget.onTranslateComplete?.call();
         case VLibrasEventType.error:
-          _reportError(event.message ?? 'Erro desconhecido');
+          _reportError(event.message ?? 'Erro desconhecido', data: event.data);
         default:
           break;
       }
-    } catch (_) {
-      _reportError('Erro ao processar evento do VLibras');
+    } catch (e, s) {
+      _reportError('Erro ao processar evento do VLibras', cause: e, stack: s);
     }
   }
 
   VLibrasEvent _parseEvent(String json) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map) {
+        return VLibrasEvent.fromMap(Map<String, dynamic>.from(decoded));
+      }
+    } catch (_) {
+      // cai no parse tolerante abaixo
+    }
     if (json.contains('"ready"')) {
       return const VLibrasEvent(type: VLibrasEventType.ready);
     } else if (json.contains('"translateComplete"')) {

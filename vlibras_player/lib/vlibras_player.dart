@@ -1,5 +1,7 @@
 library vlibras_player;
 
+export 'src/libras_error_reporter.dart'
+    show LibrasErrorReporter, debugPrintLibrasError;
 export 'src/models/vlibras_config.dart';
 export 'src/models/vlibras_event.dart';
 export 'src/vlibras_html.dart'
