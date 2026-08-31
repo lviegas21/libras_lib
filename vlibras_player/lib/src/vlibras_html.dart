@@ -129,7 +129,7 @@ String buildVLibrasHtml({
   double originX = 0.5,
   double originY = 0.5,
   int sdkLoadRetries = 4,
-  int initTimeoutMs = 90000,
+  int initTimeoutMs = 45000,
 }) {
   // initial-scale = widget_height / naturalHeight
   // window.innerHeight = physical_height / initial-scale = naturalHeight

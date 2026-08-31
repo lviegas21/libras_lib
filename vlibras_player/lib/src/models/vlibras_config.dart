@@ -54,7 +54,7 @@ class VLibrasConfig {
     this.autoPlay = false,
     this.baseUrl = 'https://vlibras.gov.br/app',
     this.sdkLoadRetries = 4,
-    this.initTimeout = const Duration(seconds: 90),
+    this.initTimeout = const Duration(seconds: 45),
   })  : assert(speed >= 0.5 && speed <= 2.0, 'speed must be between 0.5 and 2.0'),
         assert(sdkLoadRetries >= 0);
 
