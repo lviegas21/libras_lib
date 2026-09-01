@@ -3,21 +3,21 @@
   "packages": [
     {
       "name": "characters",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/characters-1.4.0",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/characters-1.3.0",
       "packageUri": "lib/",
-      "languageVersion": "3.4"
+      "languageVersion": "2.12"
     },
     {
       "name": "collection",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/collection-1.19.1",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/collection-1.19.0",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
     {
       "name": "flutter",
-      "rootUri": "file:///Users/admin/development/flutter/packages/flutter",
+      "rootUri": "file:///C:/Users/lucas/fvm/versions/3.27.3/packages/flutter",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.3"
     },
     {
       "name": "libras_keyboard",
@@ -27,37 +27,37 @@
     },
     {
       "name": "material_color_utilities",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/material_color_utilities-0.11.1",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/material_color_utilities-0.11.1",
       "packageUri": "lib/",
       "languageVersion": "2.17"
     },
     {
       "name": "meta",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/meta-1.16.0",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/meta-1.15.0",
       "packageUri": "lib/",
       "languageVersion": "2.12"
     },
     {
       "name": "path",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/path-1.9.1",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/path-1.9.1",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
     {
       "name": "plugin_platform_interface",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/plugin_platform_interface-2.1.8",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/plugin_platform_interface-2.1.8",
       "packageUri": "lib/",
       "languageVersion": "3.0"
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///Users/admin/development/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///C:/Users/lucas/fvm/versions/3.27.3/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.2"
     },
     {
       "name": "vector_math",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/vector_math-2.1.4",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/vector_math-2.1.4",
       "packageUri": "lib/",
       "languageVersion": "2.14"
     },
@@ -69,25 +69,25 @@
     },
     {
       "name": "webview_flutter",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/webview_flutter-4.13.0",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter-4.13.0",
       "packageUri": "lib/",
       "languageVersion": "3.6"
     },
     {
       "name": "webview_flutter_android",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/webview_flutter_android-4.10.1",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_android-4.10.0",
       "packageUri": "lib/",
-      "languageVersion": "3.7"
+      "languageVersion": "3.6"
     },
     {
       "name": "webview_flutter_platform_interface",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/webview_flutter_platform_interface-2.14.0",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_platform_interface-2.14.0",
       "packageUri": "lib/",
       "languageVersion": "3.6"
     },
     {
       "name": "webview_flutter_wkwebview",
-      "rootUri": "file:///Users/admin/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.0",
+      "rootUri": "file:///C:/Users/lucas/AppData/Local/Pub/Cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.0",
       "packageUri": "lib/",
       "languageVersion": "3.6"
     },
@@ -98,10 +98,10 @@
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2026-07-06T13:15:27.103888Z",
+  "generated": "2026-08-31T18:52:43.541405Z",
   "generator": "pub",
-  "generatorVersion": "3.7.2",
-  "flutterRoot": "file:///Users/admin/development/flutter",
-  "flutterVersion": "3.29.3",
-  "pubCache": "file:///Users/admin/.pub-cache"
+  "generatorVersion": "3.6.1",
+  "flutterRoot": "file:///C:/Users/lucas/fvm/versions/3.27.3",
+  "flutterVersion": "3.27.3",
+  "pubCache": "file:///C:/Users/lucas/AppData/Local/Pub/Cache"
 }
