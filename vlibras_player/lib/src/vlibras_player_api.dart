@@ -8,6 +8,15 @@ import 'vlibras_platform_interface.dart';
 /// All calls are forwarded to [VLibrasPlatformInterface.instance], which
 /// defaults to the [VLibrasMethodChannel] backed by native Android/iOS code.
 ///
+/// > **Atenção — o caminho nativo é um esqueleto.** O WebView headless do
+/// > Android/iOS ainda usa o contrato do VLibras 6 (`vlibras-plugin.js`,
+/// > `window.__vlibrasPlayer`), que não existe mais no 7.x — e já antes disso
+/// > nunca renderizava nada (o WebView não é anexado a nenhuma view) nem
+/// > sinalizava de verdade. Para exibir o avatar use os widgets
+/// > (`VLibrasPlayerWidget`, `VLibrasResponsivePlayer`,
+/// > `VLibrasOverlayButton`), que falam com o player Unity do 7.x. Somente
+/// > [errorReporter] / [reportError] são usados pelos widgets.
+///
 /// Typical setup:
 /// ```dart
 /// await VLibrasPlayer.initialize(VLibrasConfig(avatar: VLibrasAvatar.icaro));

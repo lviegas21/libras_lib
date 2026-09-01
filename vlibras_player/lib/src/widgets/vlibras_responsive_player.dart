@@ -29,7 +29,7 @@ class VLibrasResponsivePlayer extends StatelessWidget {
     this.maxWidth = 170,
     this.maxHeight = 220,
     this.contentAlignment = Alignment.center,
-    this.avatarViewportHeight = kVLibrasAvatarOnlyViewport,
+    this.avatarViewportHeight,
     this.loadingBuilder,
     this.errorBuilder,
   });
@@ -47,7 +47,11 @@ class VLibrasResponsivePlayer extends StatelessWidget {
   final double maxHeight;
 
   final Alignment contentAlignment;
-  final double avatarViewportHeight;
+
+  /// Nulo (padrão) = enquadramento derivado de [kVLibrasAvatarZoom], igual em
+  /// qualquer tamanho e proporção de palco. Ver
+  /// [VLibrasPlayerWidget.avatarViewportHeight].
+  final double? avatarViewportHeight;
   final WidgetBuilder? loadingBuilder;
   final Widget Function(BuildContext context, String error)? errorBuilder;
 

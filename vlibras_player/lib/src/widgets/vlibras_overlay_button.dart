@@ -5,6 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../models/vlibras_config.dart';
 import '../models/vlibras_event.dart';
 import '../vlibras_html.dart';
+import '../vlibras_liveness_monitor.dart';
 import '../vlibras_player_api.dart';
 import '../vlibras_widget_controller.dart';
 
@@ -70,8 +71,9 @@ class VLibrasOverlayButton extends StatefulWidget {
 }
 
 class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
-    with SingleTickerProviderStateMixin {
-  late final WebViewController _webController;
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late WebViewController _webController;
+  int _webViewKey = 0;
   late final AnimationController _anim;
   late final Animation<double> _slideAnim;
   late final VLibrasPlayerController _ctrl;
@@ -97,13 +99,63 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
       reverseCurve: Curves.easeInCubic,
     );
 
+    WidgetsBinding.instance.addObserver(this);
     _buildWebViewController();
     _ctrl.eventStream.listen(_handleEvent);
   }
 
-  /// Canvas height so the scaled 320 CSS-wide panel matches [panelWidth].
-  double get _avatarViewportHeight =>
-      widget.panelHeight * kVLibrasPanelCssWidth / widget.panelWidth;
+  /// Vigia se a página sobreviveu — o renderer do WebView roda em outro
+  /// processo e some sob pressão de memória, cenário provável justamente aqui,
+  /// onde o player fica vivo o tempo todo por trás do botão.
+  late final VLibrasLivenessMonitor _liveness = VLibrasLivenessMonitor(
+    evaluate: (js) => _webController.runJavaScriptReturningResult(js),
+    onLost: _onPlayerLost,
+  );
+
+  /// Com o app fora de foco não há por que desenhar o avatar.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    _setActive(resumed);
+    if (resumed) {
+      if (_isReady) _liveness.start();
+    } else {
+      _liveness.stop();
+    }
+  }
+
+  Future<void> _setActive(bool active) async {
+    try {
+      await _webController.runJavaScript(
+        'if(window.__vlibrasSetActive) window.__vlibrasSetActive($active);',
+      );
+    } catch (e, s) {
+      VLibrasPlayer.reportError(e, s, reason: 'overlay-button-set-active');
+    }
+  }
+
+  void _onPlayerLost() {
+    if (!mounted) return;
+    VLibrasPlayer.reportError(
+      'A página do VLibras sumiu do WebView',
+      null,
+      reason: 'overlay-button-renderer-gone',
+      context: {'avatar': widget.config.avatar.apiId},
+    );
+    setState(() {
+      _isReady = false;
+      _errorReported = false;
+      _webViewKey++;
+    });
+    _buildWebViewController();
+  }
+
+  /// Tela virtual + zoom do painel — mesmo enquadramento do player inline,
+  /// derivado da proporção do painel (ver [vlibrasStageFraming]).
+  ({double canvasHeight, double zoom}) get _framing => vlibrasStageFraming(
+        frameWidth: widget.panelWidth,
+        frameHeight: widget.panelHeight,
+      );
 
   void _buildWebViewController() {
     _webController = WebViewController()
@@ -141,14 +193,23 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
           autoPlay: widget.config.autoPlay,
           playerWidth: widget.panelWidth,
           playerHeight: widget.panelHeight,
-          naturalHeight: _avatarViewportHeight,
+          naturalHeight: _framing.canvasHeight,
+          contentZoom: _framing.zoom,
           sdkLoadRetries: widget.config.sdkLoadRetries,
           initTimeoutMs: widget.config.initTimeout.inMilliseconds,
+          playerVersion: widget.config.playerVersion,
+          dictionaryUrl: widget.config.dictionaryUrl,
+          showSubtitles: widget.config.showSubtitles,
+          playWelcome: widget.config.playWelcome,
+          pauseWhenIdle: widget.config.pauseWhenIdle,
         ),
         baseUrl: widget.config.baseUrl,
       );
 
-    _ctrl.attach(_webController);
+    _ctrl.attach(
+      _webController,
+      translateUrl: widget.config.translateUrl,
+    );
   }
 
   void _handleEvent(VLibrasEvent event) {
@@ -156,10 +217,27 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
     if (event.type == VLibrasEventType.ready) {
       if (_errorReported) return;
       setState(() => _isReady = true);
+      _liveness.start();
       if (widget.initialText != null) {
         _ctrl.translate(widget.initialText!);
       }
     } else if (event.type == VLibrasEventType.error) {
+      // Falha pontual de tradução não queima o único report de erro do
+      // player nem esconde o avatar — só sobe pro app e pra observabilidade.
+      if (event.data?['fatal'] == false) {
+        final message = event.message ?? 'Erro desconhecido';
+        widget.onError?.call(message);
+        VLibrasPlayer.reportError(
+          message,
+          null,
+          reason: 'overlay-button-soft',
+          context: {
+            'avatar': widget.config.avatar.apiId,
+            ...?event.data,
+          },
+        );
+        return;
+      }
       if (_errorReported) return;
       _errorReported = true;
       final message = event.message ?? 'Erro desconhecido';
@@ -212,6 +290,8 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _liveness.dispose();
     _anim.dispose();
     if (widget.controller == null) _ctrl.dispose();
     super.dispose();
@@ -237,6 +317,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
                 child: SizedBox(
                   width: widget.panelWidth,
                   child: _Panel(
+                    webViewKey: ValueKey(_webViewKey),
                     primaryColor: widget.primaryColor,
                     panelHeight: widget.panelHeight,
                     webController: _webController,
@@ -293,6 +374,7 @@ class _VLibrasOverlayButtonState extends State<VLibrasOverlayButton>
 
 class _Panel extends StatelessWidget {
   const _Panel({
+    required this.webViewKey,
     required this.primaryColor,
     required this.panelHeight,
     required this.webController,
@@ -302,6 +384,7 @@ class _Panel extends StatelessWidget {
     required this.onSkip,
   });
 
+  final Key webViewKey;
   final Color primaryColor;
   final double panelHeight;
   final WebViewController webController;
@@ -327,6 +410,7 @@ class _Panel extends StatelessWidget {
             child: _Header(primaryColor: primaryColor, onClose: onClose),
           ),
           _AvatarArea(
+            key: webViewKey,
             height: panelHeight,
             webController: webController,
             isReady: isReady,
@@ -416,6 +500,7 @@ class _HeaderIconButton extends StatelessWidget {
 
 class _AvatarArea extends StatelessWidget {
   const _AvatarArea({
+    super.key,
     required this.height,
     required this.webController,
     required this.isReady,

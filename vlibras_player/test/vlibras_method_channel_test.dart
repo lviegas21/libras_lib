@@ -55,7 +55,7 @@ void main() {
       expect(config.avatar, VLibrasAvatar.icaro);
       expect(config.speed, 1.0);
       expect(config.autoPlay, false);
-      expect(config.baseUrl, 'https://vlibras.gov.br/app');
+      expect(config.baseUrl, kVLibrasPortalBaseUrl);
     });
 
     test('toMap serialises all fields', () {
